@@ -1,0 +1,63 @@
+{% extends "base.njk" %}
+
+{% block title %}{{ artist.name }} &mdash; Delta Ark Anthology{% endblock %}
+
+{% block bodyClass %}artist-page{% endblock %}
+
+{% block content %}
+<article class="artist">
+
+  <header class="artist-header">
+    <h1 class="artist-name">{{ artist.name }}</h1>
+
+    <dl class="artist-meta">
+      {% if artist.country %}
+        <dt>Country</dt>
+        <dd>{{ artist.country }}</dd>
+      {% endif %}
+      {% if artist.medium %}
+        <dt>Medium</dt>
+        <dd>{{ artist.medium }}</dd>
+      {% endif %}
+      {% if artist.year %}
+        <dt>Year</dt>
+        <dd>{{ artist.year }}</dd>
+      {% endif %}
+    </dl>
+  </header>
+
+  {% if artist.featured_image %}
+    <figure class="artist-featured-image">
+      <img src="{{ artist.featured_image }}" alt="{{ artist.name }}">
+    </figure>
+  {% endif %}
+
+  {% if artist.video_url %}
+    <div class="artist-video">
+      <iframe
+        src="{{ artist.video_url }}"
+        width="100%"
+        height="480"
+        frameborder="0"
+        allow="autoplay; fullscreen; picture-in-picture"
+        allowfullscreen
+      ></iframe>
+    </div>
+  {% endif %}
+
+  <div class="artist-body">
+    {{ artist.body | safe }}
+  </div>
+
+  {% if artist.essay_url %}
+    <div class="artist-essay-link">
+      <a href="{{ artist.essay_url }}" target="_blank" rel="noopener">Read Essay &rarr;</a>
+    </div>
+  {% endif %}
+
+</article>
+
+<nav class="artist-pagination">
+  <a href="/toc/">&larr; Table of Contents</a>
+</nav>
+{% endblock %}

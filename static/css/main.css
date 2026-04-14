@@ -1,0 +1,212 @@
+/* ── Reset & base ─────────────────────────────────────────── */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --color-bg: #0a0a0a;
+  --color-text: #e8e8e8;
+  --color-muted: #888;
+  --color-accent: #c8f060;
+  --font-body: 'Georgia', serif;
+  --font-ui: system-ui, sans-serif;
+  --max-width: 860px;
+}
+
+html {
+  font-size: 18px;
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+body {
+  font-family: var(--font-body);
+  line-height: 1.6;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+a {
+  color: var(--color-accent);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+img {
+  max-width: 100%;
+  display: block;
+}
+
+/* ── Site header / nav ────────────────────────────────────── */
+
+.site-header {
+  padding: 1.5rem 2rem;
+  border-bottom: 1px solid #222;
+}
+
+.site-nav {
+  display: flex;
+  gap: 2rem;
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+/* ── Site footer ──────────────────────────────────────────── */
+
+.site-footer {
+  margin-top: auto;
+  padding: 2rem;
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+  color: var(--color-muted);
+  border-top: 1px solid #222;
+}
+
+/* ── Artist page ──────────────────────────────────────────── */
+
+.artist {
+  max-width: var(--max-width);
+  margin: 0 auto;
+  padding: 3rem 2rem;
+}
+
+.artist-header {
+  margin-bottom: 2.5rem;
+}
+
+.artist-name {
+  font-size: 2.5rem;
+  font-weight: normal;
+  line-height: 1.1;
+  margin-bottom: 1rem;
+}
+
+.artist-meta {
+  display: flex;
+  gap: 2rem;
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+  color: var(--color-muted);
+  list-style: none;
+}
+
+.artist-meta dt {
+  display: none; /* hide labels, values speak for themselves */
+}
+
+.artist-meta dd {
+  margin: 0;
+}
+
+.artist-featured-image {
+  margin-bottom: 2rem;
+}
+
+.artist-video {
+  margin-bottom: 2.5rem;
+  aspect-ratio: 16 / 9;
+  background: #111;
+}
+
+.artist-video iframe {
+  width: 100%;
+  height: 100%;
+}
+
+.artist-body {
+  max-width: 65ch;
+}
+
+.artist-body p {
+  margin-bottom: 1.25rem;
+}
+
+.artist-essay-link {
+  margin-top: 2rem;
+  font-family: var(--font-ui);
+  font-size: 0.9rem;
+}
+
+.artist-pagination {
+  max-width: var(--max-width);
+  margin: 0 auto;
+  padding: 2rem 2rem 3rem;
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+}
+
+/* ── Table of contents ────────────────────────────────────── */
+
+.toc {
+  max-width: var(--max-width);
+  margin: 0 auto;
+  padding: 3rem 2rem;
+}
+
+.toc-header {
+  margin-bottom: 2.5rem;
+}
+
+.toc-header h1 {
+  font-size: 2rem;
+  font-weight: normal;
+  margin-bottom: 0.5rem;
+}
+
+.toc-count {
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+  color: var(--color-muted);
+}
+
+.toc-list {
+  list-style: none;
+  counter-reset: toc-counter;
+}
+
+.toc-entry {
+  counter-increment: toc-counter;
+  border-bottom: 1px solid #1e1e1e;
+}
+
+.toc-link {
+  display: flex;
+  align-items: baseline;
+  gap: 1.5rem;
+  padding: 1rem 0;
+  color: var(--color-text);
+  font-family: var(--font-ui);
+  transition: color 0.15s;
+}
+
+.toc-link::before {
+  content: counter(toc-counter, decimal-leading-zero);
+  font-size: 0.75rem;
+  color: var(--color-muted);
+  min-width: 2ch;
+  flex-shrink: 0;
+}
+
+.toc-link:hover {
+  color: var(--color-accent);
+  text-decoration: none;
+}
+
+.toc-name {
+  flex: 1;
+  font-size: 1.1rem;
+}
+
+.toc-meta {
+  font-size: 0.8rem;
+  color: var(--color-muted);
+}

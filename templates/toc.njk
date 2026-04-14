@@ -1,0 +1,31 @@
+{% extends "base.njk" %}
+
+{% block title %}Table of Contents &mdash; Delta Ark Anthology{% endblock %}
+
+{% block bodyClass %}toc-page{% endblock %}
+
+{% block content %}
+<section class="toc">
+
+  <header class="toc-header">
+    <h1>Table of Contents</h1>
+    <p class="toc-count">{{ artists | length }} artists</p>
+  </header>
+
+  <ol class="toc-list">
+    {% for artist in artists %}
+    <li class="toc-entry">
+      <a href="/artists/{{ artist.slug }}/" class="toc-link">
+        <span class="toc-name">{{ artist.name }}</span>
+        <span class="toc-meta">
+          {% if artist.country %}{{ artist.country }}{% endif %}
+          {% if artist.country and artist.medium %} &mdash; {% endif %}
+          {% if artist.medium %}{{ artist.medium }}{% endif %}
+        </span>
+      </a>
+    </li>
+    {% endfor %}
+  </ol>
+
+</section>
+{% endblock %}
