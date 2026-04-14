@@ -1,42 +1,20 @@
-/* ── Reset & base ─────────────────────────────────────────── */
-
 *, *::before, *::after {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
 }
 
-:root {
-  --color-bg: #0a0a0a;
-  --color-text: #e8e8e8;
-  --color-muted: #888;
-  --color-accent: #c8f060;
-  --font-body: 'Georgia', serif;
-  --font-ui: system-ui, sans-serif;
-  --max-width: 860px;
-}
-
-html {
-  font-size: 18px;
-  background: var(--color-bg);
-  color: var(--color-text);
-}
-
 body {
-  font-family: var(--font-body);
-  line-height: 1.6;
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
+  font-family: sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+  color: #000;
+  background: #fff;
+  padding: 2rem;
 }
 
 a {
-  color: var(--color-accent);
-  text-decoration: none;
-}
-
-a:hover {
-  text-decoration: underline;
+  color: #000;
 }
 
 img {
@@ -44,77 +22,47 @@ img {
   display: block;
 }
 
-/* ── Site header / nav ────────────────────────────────────── */
-
-.site-header {
-  padding: 1.5rem 2rem;
-  border-bottom: 1px solid #222;
-}
+/* Nav */
 
 .site-nav {
+  margin-bottom: 2rem;
   display: flex;
-  gap: 2rem;
-  font-family: var(--font-ui);
-  font-size: 0.85rem;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
+  gap: 1.5rem;
 }
 
-/* ── Site footer ──────────────────────────────────────────── */
-
-.site-footer {
-  margin-top: auto;
-  padding: 2rem;
-  font-family: var(--font-ui);
-  font-size: 0.8rem;
-  color: var(--color-muted);
-  border-top: 1px solid #222;
-}
-
-/* ── Artist page ──────────────────────────────────────────── */
+/* Artist page */
 
 .artist {
-  max-width: var(--max-width);
-  margin: 0 auto;
-  padding: 3rem 2rem;
+  max-width: 700px;
 }
 
 .artist-header {
-  margin-bottom: 2.5rem;
+  margin-bottom: 2rem;
 }
 
 .artist-name {
-  font-size: 2.5rem;
-  font-weight: normal;
-  line-height: 1.1;
-  margin-bottom: 1rem;
+  font-size: 1.5rem;
+  margin-bottom: 0.5rem;
 }
 
 .artist-meta {
   display: flex;
-  gap: 2rem;
-  font-family: var(--font-ui);
-  font-size: 0.85rem;
-  color: var(--color-muted);
+  gap: 1.5rem;
   list-style: none;
+  font-size: 0.9rem;
 }
 
 .artist-meta dt {
-  display: none; /* hide labels, values speak for themselves */
-}
-
-.artist-meta dd {
-  margin: 0;
+  display: none;
 }
 
 .artist-featured-image {
-  margin-bottom: 2rem;
+  margin-bottom: 1.5rem;
 }
 
 .artist-video {
-  margin-bottom: 2.5rem;
+  margin-bottom: 1.5rem;
   aspect-ratio: 16 / 9;
-  background: #111;
 }
 
 .artist-video iframe {
@@ -123,90 +71,52 @@ img {
 }
 
 .artist-body {
-  max-width: 65ch;
+  margin-bottom: 1.5rem;
 }
 
 .artist-body p {
-  margin-bottom: 1.25rem;
-}
-
-.artist-essay-link {
-  margin-top: 2rem;
-  font-family: var(--font-ui);
-  font-size: 0.9rem;
+  margin-bottom: 1rem;
 }
 
 .artist-pagination {
-  max-width: var(--max-width);
-  margin: 0 auto;
-  padding: 2rem 2rem 3rem;
-  font-family: var(--font-ui);
-  font-size: 0.85rem;
+  margin-top: 2rem;
 }
 
-/* ── Table of contents ────────────────────────────────────── */
-
-.toc {
-  max-width: var(--max-width);
-  margin: 0 auto;
-  padding: 3rem 2rem;
-}
+/* Table of contents */
 
 .toc-header {
-  margin-bottom: 2.5rem;
-}
-
-.toc-header h1 {
-  font-size: 2rem;
-  font-weight: normal;
-  margin-bottom: 0.5rem;
-}
-
-.toc-count {
-  font-family: var(--font-ui);
-  font-size: 0.85rem;
-  color: var(--color-muted);
+  margin-bottom: 1.5rem;
 }
 
 .toc-list {
   list-style: none;
-  counter-reset: toc-counter;
 }
 
 .toc-entry {
-  counter-increment: toc-counter;
-  border-bottom: 1px solid #1e1e1e;
+  border-bottom: 1px solid #ccc;
 }
 
 .toc-link {
   display: flex;
-  align-items: baseline;
   gap: 1.5rem;
-  padding: 1rem 0;
-  color: var(--color-text);
-  font-family: var(--font-ui);
-  transition: color 0.15s;
-}
-
-.toc-link::before {
-  content: counter(toc-counter, decimal-leading-zero);
-  font-size: 0.75rem;
-  color: var(--color-muted);
-  min-width: 2ch;
-  flex-shrink: 0;
-}
-
-.toc-link:hover {
-  color: var(--color-accent);
+  padding: 0.75rem 0;
+  color: #000;
   text-decoration: none;
 }
 
-.toc-name {
-  flex: 1;
-  font-size: 1.1rem;
+.toc-link:hover {
+  text-decoration: underline;
 }
 
 .toc-meta {
+  color: #666;
+  font-size: 0.875rem;
+}
+
+/* Footer */
+
+.site-footer {
+  margin-top: 3rem;
   font-size: 0.8rem;
-  color: var(--color-muted);
+  color: #666;
 }
