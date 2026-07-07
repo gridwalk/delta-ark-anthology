@@ -4,6 +4,23 @@ A static website for the Delta Ark Anthology — a curated collection of new med
 
 The site serves as both a teaser for an upcoming book and a standalone online presence for the anthology.
 
+**Live site:** [delta-ark-anthology.futurefocus.studio](https://delta-ark-anthology.futurefocus.studio/)
+
+---
+
+## Tech stack
+
+| Tool | Role |
+|------|------|
+| [Node.js](https://nodejs.org) (v24) | Runtime for the build script |
+| [Nunjucks](https://mozilla.github.io/nunjucks/) | HTML templating (`templates/*.njk`) |
+| [marked](https://marked.js.org/) | Renders markdown bodies to HTML |
+| [gray-matter](https://github.com/jonschlinkert/gray-matter) | Parses YAML frontmatter from `index.md` files |
+| [chokidar](https://github.com/paulmillr/chokidar) | File watching for `npm run watch` |
+| GitHub Actions + GitHub Pages | Automated build and hosting |
+
+The generator itself is a single ~180-line script, `build.js`. There is no framework, database, CMS, or server.
+
 ---
 
 ## How it works
@@ -99,9 +116,22 @@ npm run watch
 
 ## Deployment
 
-The site is deployed via GitHub Pages. Pushing to the `main` branch automatically triggers a GitHub Actions workflow that builds the site and publishes the `dist/` folder. No manual build step required.
+The site is deployed via GitHub Pages. Pushing to the `main` branch automatically triggers a GitHub Actions workflow (`.github/workflows/deploy.yml`) that builds the site with Node 24 and publishes the `dist/` folder. No manual build step required.
 
-See `docs/deploy-plan.md` for the full deployment setup guide.
+The live site is served from a custom domain:
+
+- **URL:** https://delta-ark-anthology.futurefocus.studio/
+- **Repository:** [`gridwalk/delta-ark-anthology`](https://github.com/gridwalk/delta-ark-anthology)
+- **Domain config:** the custom domain is set in **Settings → Pages**; an HTTPS certificate is provisioned automatically by GitHub.
+
+The editing-to-live flow is:
+
+1. Edit or add files in `artists/`, `templates/`, or `static/`
+2. Commit and push to `main`
+3. GitHub Actions builds and deploys (about 20–60 seconds)
+4. The live site updates automatically
+
+See `docs/deploy-plan.md` for the full one-time setup guide (repo creation, workflow, Pages, and custom-domain DNS).
 
 ---
 
