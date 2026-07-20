@@ -1,3 +1,14 @@
 node_modules/
 dist/
 .DS_Store
+
+# Internal working material — not for the public repo.
+# Meeting transcripts (named participants) and moodboard reference images.
+context/
+
+# Raw form export: contains unlisted Drive/Dropbox links granting access to
+# contributors' full-resolution stills and master video files.
+docs/artist-form-responses-*.csv
+
+# Private spreadsheet URL for the submissions sheet.
+docs/content-submissions-link.md
