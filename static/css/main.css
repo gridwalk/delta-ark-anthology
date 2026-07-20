@@ -1,20 +1,76 @@
+/* ── Palette ──────────────────────────────────────────────────────────────────
+   Wada Sanzo classic combination #340, plus white for text.
+   No other colors, tints, or alpha blends are used anywhere in this sheet. */
+
+:root {
+  --peach-red: #f15a30;
+  --sea-green: #00b49b;
+  /* Darkened from the Wada Sanzo value (#b6bfc1). Same hue, lower value. */
+  --neutral-gray: #4f5557;
+  --black: #111314;
+  --white: #ffffff;
+
+  /* One padding standard for every panel and cell on the site. Split into
+     axes so rules that need to cancel it (the flush label strip) can do the
+     arithmetic instead of hardcoding a matching value. */
+  --pad-y: 0.25rem;
+  --pad-x: 0.3rem;
+  --pad-cell: var(--pad-y) var(--pad-x);
+
+  /* Line box height, stated as a length so layout can do arithmetic with it. */
+  --line: 1.5rem;
+  /* Entries per column in the table of contents before it wraps. */
+  --toc-lines: 5;
+}
+
 *, *::before, *::after {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
 }
 
+/* One type size and one weight throughout. The universal rules are deliberate:
+   they stop headings, <strong>, and any future markup from introducing a second
+   size or a bold face. Hierarchy is carried by color alone. */
+/* The ground color lives on <html> so <body> can stay transparent and let the
+   backdrop canvas show through from behind it. */
+html {
+  font-size: 11px;
+  background: var(--black);
+}
+
+* {
+  font-size: 1rem;
+  font-weight: 400;
+}
+
+/* Everything is monospace. "Noto Sans SC" trails the stack only for CJK, which
+   Noto Sans Mono does not cover — Google Fonts serves no monospace CJK face.
+   CJK glyphs are full-width and uniform, so they still set to an even rhythm. */
 body {
-  font-family: sans-serif;
-  font-size: 16px;
-  line-height: 1.5;
-  color: #000;
-  background: #fff;
-  padding: 2rem;
+  font-family: "Noto Sans Mono", "Noto Sans SC", monospace;
+  font-style: normal;
+  /* A length, not a ratio, so the TOC height cap resolves to exact line boxes.
+     Safe here because every element on the site is the same font size. */
+  line-height: var(--line);
+  color: var(--white);
+  background: transparent;
+  padding: 1.5rem;
+
+  /* Light-on-dark text renders heavier than it should with subpixel AA; these
+     thin it back to the intended weight. Matters more here than usual, since
+     everything is one weight and small. */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 a {
-  color: #000;
+  color: var(--sea-green);
+}
+
+a:hover {
+  color: var(--peach-red);
 }
 
 img {
@@ -22,101 +78,272 @@ img {
   display: block;
 }
 
+/* ── Backdrop ─────────────────────────────────────────────────────────────────
+   Fixed full-viewport canvas sitting behind the page content. It is decorative
+   and carries no information, so it is hidden from assistive tech and ignores
+   pointer events entirely. */
+
+.scene-backdrop {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.site-header,
+main {
+  position: relative;
+  z-index: 1;
+}
+
+code, pre, kbd, samp {
+  color: var(--neutral-gray);
+}
+
+/* ── Panel system ─────────────────────────────────────────────────────────────
+   Blocks are unruled — separation comes from the fills and the padding, not
+   from borders. */
+
+.panel {
+  padding: var(--pad-cell);
+}
+
+/* Label strip across the top of a panel, flush to its edges. */
+.panel-label {
+  display: block;
+  margin: calc(var(--pad-y) * -1) calc(var(--pad-x) * -1) var(--pad-y);
+  padding: var(--pad-cell);
+  color: var(--neutral-gray);
+}
+
 /* Nav */
 
 .site-nav {
-  margin-bottom: 2rem;
   display: flex;
   gap: 1.5rem;
 }
 
+.site-nav a {
+  padding: var(--pad-cell);
+  text-decoration: none;
+}
+
 /* Artist page */
 
+/* Text-only pages stay a single measured column. Pages with media become two
+   columns — prose left, media right — so the video fills what was empty space.
+   The aside is offset from the prose column by a gap. */
 .artist {
-  max-width: 700px;
+  max-width: 66ch;
 }
 
-.artist-header {
-  margin-bottom: 2rem;
+/* No max-width: the grid spans the viewport like the nav and footer do. Prose
+   holds its 66ch measure and the media column absorbs everything left over. */
+.artist.has-media {
+  max-width: none;
+  display: grid;
+  grid-template-columns: minmax(0, 66ch) minmax(0, 1fr);
+  align-items: start;
 }
 
-.artist-name {
-  font-size: 1.5rem;
-  margin-bottom: 0.5rem;
+.artist.has-media .artist-aside {
+  margin-left: 1.5rem;
+  position: sticky;
+  top: 1.5rem;
+}
+
+/* Below this the two columns no longer both fit at a readable measure. */
+@media (max-width: 1100px) {
+  .artist.has-media {
+    display: block;
+    max-width: 66ch;
+  }
+
+  .artist.has-media .artist-aside {
+    margin-left: 0;
+    margin-top: 1.5rem;
+    position: static;
+  }
 }
 
 .artist-meta {
   display: flex;
   gap: 1.5rem;
   list-style: none;
-  font-size: 0.9rem;
+  margin-top: var(--pad-y);
+  color: var(--neutral-gray);
 }
 
 .artist-meta dt {
   display: none;
 }
 
+/* Media runs edge to edge — no padding inset. The label keeps its own. */
+.artist-video,
 .artist-featured-image {
-  margin-bottom: 1.5rem;
+  padding: 0;
 }
 
-.artist-video {
-  margin-bottom: 1.5rem;
+.artist-video > .panel-label,
+.artist-featured-image > .panel-label {
+  margin: 0;
+  padding: var(--pad-cell);
+}
+
+.artist-featured-image img {
+  width: 100%;
+}
+
+.artist-video-frame {
   aspect-ratio: 16 / 9;
 }
 
-.artist-video iframe {
+.artist-video-frame iframe {
   width: 100%;
   height: 100%;
+  display: block;
+  border: 0;
 }
 
-.artist-body {
-  margin-bottom: 1.5rem;
+/* Inverted blocks, screened back to a halftone. A 2px tile with two opposing
+   colored quadrants gives a checkerboard — every other pixel is inked, the rest
+   transparent, so the black ground reads through at 50%. Hard color stops keep
+   the pixels crisp rather than blurring into a solid mid-tone.
+   Each block sets --halftone; the pattern itself is written once. */
+.artist-header,
+.artist-work {
+  background-color: transparent;
+  background-image: repeating-conic-gradient(
+    var(--halftone) 0% 25%,
+    transparent 0% 50%
+  );
+  background-size: 2px 2px;
 }
 
-.artist-body p {
+.artist-header {
+  --halftone: var(--peach-red);
+}
+
+.artist-work {
+  --halftone: var(--sea-green);
+}
+
+/* The halftone halves the ink behind the text, so contrast suffers. A halo in
+   the block's own color pools solid ink right around the glyphs — the letters
+   sit on 100% color instead of a 50% dither, while the block still reads as a
+   screen from any distance. The class beats the universal weight lock. */
+.artist-name,
+.artist-work-title {
+  color: var(--black);
+  font-weight: 700;
+  text-shadow:
+    0 0 1px var(--halftone),
+    0 0 2px var(--halftone),
+    0 0 4px var(--halftone),
+    0 0 6px var(--halftone);
+}
+
+.artist-body h2 {
+  color: var(--sea-green);
   margin-bottom: 1rem;
 }
 
-.artist-pagination {
-  margin-top: 2rem;
+.artist-body h2 + p {
+  margin-top: 0;
+}
+
+/* Justified, newspaper-style. Monospace can't tighten letters to make a line
+   fit, so all the slack lands in the word gaps — hyphenation is doing real work
+   here, breaking long words instead of letting rivers open up. It relies on the
+   lang attribute in base.njk. */
+.artist-body p {
+  margin-bottom: 1rem;
+  text-align: justify;
+  hyphens: auto;
+}
+
+.artist-body p:last-child {
+  margin-bottom: 0;
 }
 
 /* Table of contents */
 
-.toc-header {
-  margin-bottom: 1.5rem;
+.toc {
+  max-width: none;
 }
 
+/* Each entry is one line of running text — name, a single space, then the work
+   title. The space is the literal one between the spans in the markup, so the
+   two read as continuous text rather than as separate columns. */
+/* Fixed row count, columns generated as needed and filled top-to-bottom. Equal
+   1fr columns keep the block inside the page width — sizing columns to their
+   content instead lets one long title push the rest off-screen. */
 .toc-list {
   list-style: none;
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-rows: repeat(var(--toc-lines), var(--line));
+  grid-auto-columns: minmax(0, 1fr);
+  column-gap: 2rem;
 }
 
+/* One line per entry, so the row count is also the line count. Titles too long
+   for their column are clipped rather than wrapped, which would break the
+   fixed height. */
 .toc-entry {
-  border-bottom: 1px solid #ccc;
+  min-width: 0;
 }
 
+/* Name left, title right, dotted leader taking up whatever is between them. */
 .toc-link {
   display: flex;
-  gap: 1.5rem;
-  padding: 0.75rem 0;
-  color: #000;
+  align-items: baseline;
+  gap: 0.5ch;
+  overflow: hidden;
+  white-space: nowrap;
+  padding: 0;
+  background: transparent;
   text-decoration: none;
 }
 
+.toc-name {
+  flex: 0 0 auto;
+  color: var(--peach-red);
+}
+
+/* flex: 1 on a zero basis, so the leader absorbs the slack rather than
+   claiming width the title needs. */
+.toc-leader {
+  flex: 1 1 0;
+  min-width: 1ch;
+  align-self: center;
+  border-bottom: 1px dotted var(--neutral-gray);
+}
+
+/* Shrinks before the name does, and clips with an ellipsis when a column is
+   too narrow for the full title. */
+.toc-work {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: right;
+  color: var(--white);
+}
+
 .toc-link:hover {
-  text-decoration: underline;
+  background: var(--white);
 }
 
-.toc-meta {
-  color: #666;
-  font-size: 0.875rem;
+.toc-link:hover .toc-name,
+.toc-link:hover .toc-work {
+  color: var(--black);
 }
 
-/* Footer */
-
-.site-footer {
-  margin-top: 3rem;
-  font-size: 0.8rem;
-  color: #666;
+.toc-link:hover .toc-leader {
+  border-bottom-color: var(--black);
 }
+

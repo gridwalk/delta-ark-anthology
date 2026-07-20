@@ -5,59 +5,78 @@
 {% block bodyClass %}artist-page{% endblock %}
 
 {% block content %}
-<article class="artist">
+{% set hasMedia = artist.video_url or artist.featured_image %}
 
-  <header class="artist-header">
-    <h1 class="artist-name">{{ artist.name }}</h1>
+<article class="artist{% if hasMedia %} has-media{% endif %}">
 
-    <dl class="artist-meta">
-      {% if artist.country %}
-        <dt>Country</dt>
-        <dd>{{ artist.country }}</dd>
+  <div class="artist-main panel-stack">
+
+    <header class="panel artist-header">
+      <h1 class="artist-name">{{ artist.name }}</h1>
+
+      {% if artist.country or artist.medium or artist.year %}
+        <dl class="artist-meta">
+          {% if artist.country %}
+            <dt>Country</dt>
+            <dd>{{ artist.country }}</dd>
+          {% endif %}
+          {% if artist.medium %}
+            <dt>Medium</dt>
+            <dd>{{ artist.medium }}</dd>
+          {% endif %}
+          {% if artist.year %}
+            <dt>Year</dt>
+            <dd>{{ artist.year }}</dd>
+          {% endif %}
+        </dl>
       {% endif %}
-      {% if artist.medium %}
-        <dt>Medium</dt>
-        <dd>{{ artist.medium }}</dd>
-      {% endif %}
-      {% if artist.year %}
-        <dt>Year</dt>
-        <dd>{{ artist.year }}</dd>
-      {% endif %}
-    </dl>
-  </header>
+    </header>
 
-  {% if artist.featured_image %}
-    <figure class="artist-featured-image">
-      <img src="{{ artist.featured_image }}" alt="{{ artist.name }}">
-    </figure>
-  {% endif %}
+    {% if artist.work_title %}
+      <div class="panel artist-work">
+        <h2 class="artist-work-title">{{ artist.work_title }}</h2>
+      </div>
+    {% endif %}
 
-  {% if artist.video_url %}
-    <div class="artist-video">
-      <iframe
-        src="{{ artist.video_url }}"
-        width="100%"
-        height="480"
-        frameborder="0"
-        allow="autoplay; fullscreen; picture-in-picture"
-        allowfullscreen
-      ></iframe>
+    <div class="panel artist-body">
+      {{ artist.body | safe }}
     </div>
-  {% endif %}
 
-  <div class="artist-body">
-    {{ artist.body | safe }}
+    {% if artist.essay_url %}
+      <div class="panel artist-essay-link">
+        <a href="{{ artist.essay_url }}" target="_blank" rel="noopener">Read Essay &rarr;</a>
+      </div>
+    {% endif %}
+
   </div>
 
-  {% if artist.essay_url %}
-    <div class="artist-essay-link">
-      <a href="{{ artist.essay_url }}" target="_blank" rel="noopener">Read Essay &rarr;</a>
-    </div>
+  {% if hasMedia %}
+    <aside class="artist-aside panel-stack">
+
+      {% if artist.video_url %}
+        <div class="panel artist-video">
+          <div class="artist-video-frame">
+            <iframe
+              src="{{ artist.video_url }}"
+              width="100%"
+              height="480"
+              frameborder="0"
+              allow="autoplay; fullscreen; picture-in-picture"
+              allowfullscreen
+            ></iframe>
+          </div>
+        </div>
+      {% endif %}
+
+      {% if artist.featured_image %}
+        <figure class="panel artist-featured-image">
+          <span class="panel-label">Plate</span>
+          <img src="{{ artist.featured_image }}" alt="{{ artist.name }}">
+        </figure>
+      {% endif %}
+
+    </aside>
   {% endif %}
 
 </article>
-
-<nav class="artist-pagination">
-  <a href="/toc/">&larr; Table of Contents</a>
-</nav>
 {% endblock %}
