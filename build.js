@@ -7,6 +7,7 @@ const nunjucks = require('nunjucks');
 const ARTISTS_DIR = path.join(__dirname, 'artists');
 const TEMPLATES_DIR = path.join(__dirname, 'templates');
 const STATIC_DIR = path.join(__dirname, 'static');
+const EMBEDS_DIR = path.join(__dirname, 'embeds');
 const DIST_DIR = path.join(__dirname, 'dist');
 
 // Configure nunjucks to load from templates directory
@@ -122,6 +123,30 @@ function copyStatic() {
   console.log('  Copied: static assets');
 }
 
+/* Prebuilt standalone pages, copied to the site root verbatim.
+ *
+ * Each subdirectory of embeds/ becomes a top-level path — embeds/foo/ serves
+ * at /foo/. These are built elsewhere and dropped in whole; nothing here
+ * templates or rewrites them, so their asset paths must already match the
+ * path they are served from.
+ *
+ * Note these are only unlisted, not private: the repo is public and Pages
+ * serves every file to anyone who asks for the URL.
+ */
+function copyEmbeds() {
+  if (!fs.existsSync(EMBEDS_DIR)) return;
+
+  const names = fs
+    .readdirSync(EMBEDS_DIR, { withFileTypes: true })
+    .filter((e) => e.isDirectory())
+    .map((e) => e.name);
+
+  for (const name of names) {
+    copyDir(path.join(EMBEDS_DIR, name), path.join(DIST_DIR, name));
+    console.log(`  Copied: /${name}/ (embed)`);
+  }
+}
+
 // three.js ships from node_modules rather than being committed.
 //
 // Two things matter about the layout below. The module build imports
@@ -175,6 +200,7 @@ function build() {
   buildHomepage();
   copyStatic();
   copyVendor();
+  copyEmbeds();
 
   console.log('\nDone.\n');
 }
