@@ -68,13 +68,12 @@ function loadArtists() {
     });
   }
 
-  // Sort: by explicit `order` field first, then alphabetically by name
-  artists.sort((a, b) => {
-    if (a.order != null && b.order != null) return a.order - b.order;
-    if (a.order != null) return -1;
-    if (b.order != null) return 1;
-    return (a.name || '').localeCompare(b.name || '');
-  });
+  // Always alphabetical by contributor name. `sensitivity: 'base'` makes the
+  // comparison case- and accent-insensitive, so "XTRUX" and "Castañeda" land
+  // where a reader expects rather than after every lowercase name.
+  artists.sort((a, b) =>
+    (a.name || '').localeCompare(b.name || '', 'en', { sensitivity: 'base' })
+  );
 
   return artists;
 }
@@ -92,7 +91,7 @@ function buildArtistPages(artists) {
       copyDir(imagesDir, path.join(outDir, 'images'));
     }
 
-    const html = env.render('artist.njk', { artist });
+    const html = env.render('artist.njk', { artist, page: 'artist' });
     fs.writeFileSync(path.join(outDir, 'index.html'), html);
     console.log(`  Built: artists/${artist.slug}/index.html`);
   }
@@ -102,7 +101,7 @@ function buildTOC(artists) {
   const outDir = path.join(DIST_DIR, 'toc');
   ensureDir(outDir);
 
-  const html = env.render('toc.njk', { artists });
+  const html = env.render('toc.njk', { artists, page: 'toc' });
   fs.writeFileSync(path.join(outDir, 'index.html'), html);
   console.log('  Built: toc/index.html');
 }
@@ -123,6 +122,45 @@ function copyStatic() {
   console.log('  Copied: static assets');
 }
 
+// three.js ships from node_modules rather than being committed.
+//
+// Two things matter about the layout below. The module build imports
+// ./three.core.min.js by relative path, so those two sit together. And the
+// jsm modules import the bare specifier "three", which the import map in
+// base.njk resolves.
+function copyVendor() {
+  const threeDir = path.join(__dirname, 'node_modules', 'three');
+  const outDir = path.join(DIST_DIR, 'static', 'js', 'vendor');
+
+  const core = ['three.module.min.js', 'three.core.min.js'];
+  const jsm = [
+    'lines/LineSegments2.js',
+    'lines/LineSegmentsGeometry.js',
+    'lines/LineMaterial.js',
+  ];
+
+  const missing = [
+    ...core.map((f) => path.join(threeDir, 'build', f)),
+    ...jsm.map((f) => path.join(threeDir, 'examples', 'jsm', f)),
+  ].filter((p) => !fs.existsSync(p));
+
+  if (missing.length) {
+    console.warn(`  Warning: three.js files missing, skipping (${missing.length})`);
+    return;
+  }
+
+  ensureDir(outDir);
+  for (const f of core) {
+    fs.copyFileSync(path.join(threeDir, 'build', f), path.join(outDir, f));
+  }
+  for (const f of jsm) {
+    const dest = path.join(outDir, 'jsm', f);
+    ensureDir(path.dirname(dest));
+    fs.copyFileSync(path.join(threeDir, 'examples', 'jsm', f), dest);
+  }
+  console.log(`  Copied: three.js (${core.length + jsm.length} files)`);
+}
+
 // ── Main ─────────────────────────────────────────────────────────────────────
 
 function build() {
@@ -136,6 +174,7 @@ function build() {
   buildTOC(artists);
   buildHomepage();
   copyStatic();
+  copyVendor();
 
   console.log('\nDone.\n');
 }
