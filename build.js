@@ -98,13 +98,24 @@ function buildArtistPages(artists) {
   }
 }
 
+/* Two listings over the same artists, differing only in backdrop: /toc/ frames
+   the ship, /toc-lattice/ keeps the three.js placeholder grid and its
+   hover-to-frame camera. The markup itself comes from one shared include. */
 function buildTOC(artists) {
-  const outDir = path.join(DIST_DIR, 'toc');
-  ensureDir(outDir);
+  const pages = [
+    { dir: 'toc', template: 'toc.njk', page: 'toc' },
+    { dir: 'toc-lattice', template: 'toc-lattice.njk', page: 'toc-lattice' },
+  ];
 
-  const html = env.render('toc.njk', { artists, page: 'toc' });
-  fs.writeFileSync(path.join(outDir, 'index.html'), html);
-  console.log('  Built: toc/index.html');
+  for (const { dir, template, page } of pages) {
+    const outDir = path.join(DIST_DIR, dir);
+    ensureDir(outDir);
+    fs.writeFileSync(
+      path.join(outDir, 'index.html'),
+      env.render(template, { artists, page })
+    );
+    console.log(`  Built: ${dir}/index.html`);
+  }
 }
 
 function buildHomepage() {

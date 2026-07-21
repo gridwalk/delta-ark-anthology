@@ -1,0 +1,14 @@
+{# Preserved copy of the table of contents with the three.js lattice backdrop,
+   kept after /toc/ moved to the ship. Hovering a row still flies the camera to
+   that contributor's placeholder — that interaction lives only on this page. #}
+{% extends "base.njk" %}
+
+{% block title %}Table of Contents (lattice) &mdash; Delta Ark Anthology{% endblock %}
+
+{% block bodyClass %}toc-page{% endblock %}
+
+{% block content %}
+<section class="toc">
+  {% include "_toc-list.njk" %}
+</section>
+{% endblock %}

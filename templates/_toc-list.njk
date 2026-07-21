@@ -1,0 +1,10 @@
+{# Shared by both table-of-contents pages so the listing stays in one place.
+   data-index is what the lattice backdrop binds its hover targeting to; it is
+   inert on pages that do not load that scene. #}
+<ul class="toc-list">
+  {% for artist in artists %}
+  <li class="toc-entry">
+    <a href="/artists/{{ artist.slug }}/" class="toc-link" data-index="{{ loop.index0 }}"><span class="toc-name">{{ artist.name }}</span><span class="toc-leader"></span><span class="toc-work">{{ artist.work_title }}</span></a>
+  </li>
+  {% endfor %}
+</ul>

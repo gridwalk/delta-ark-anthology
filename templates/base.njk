@@ -8,8 +8,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Mono:wght@100..900&family=Noto+Sans+SC:wght@100..900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/css/main.css">
-  {% if page == 'toc' %}
-    {# three's postprocessing modules import the bare specifier "three".
+  {% if page == 'toc-lattice' %}
+    {# three's line modules import the bare specifier "three".
        Must precede any module script for the mapping to apply. #}
     <script type="importmap">
       { "imports": { "three": "/static/js/vendor/three.module.min.js" } }
@@ -19,8 +19,22 @@
 </head>
 <body class="{% block bodyClass %}{% endblock %}">
 
-  {% if page == 'toc' %}
+  {% if page == 'toc-lattice' %}
     <canvas id="scene" class="scene-backdrop" data-count="{{ artists | length }}" aria-hidden="true"></canvas>
+  {% endif %}
+
+  {% if page == 'toc' %}
+    {# The ship is a self-contained WebGPU build with its own render loop, so
+       it is framed rather than imported. pointer-events are disabled in CSS so
+       its OrbitControls never swallow clicks meant for the listing above. #}
+    <iframe
+      class="ship-backdrop"
+      src="/ship/"
+      title="Arcology ship"
+      tabindex="-1"
+      aria-hidden="true"
+      loading="lazy"
+    ></iframe>
   {% endif %}
 
   <header class="site-header">
@@ -34,7 +48,7 @@
   </main>
 
   <script src="/static/js/main.js"></script>
-  {% if page == 'toc' %}
+  {% if page == 'toc-lattice' %}
     <script type="module" src="/static/js/scene.js"></script>
   {% endif %}
   {% block scripts %}{% endblock %}

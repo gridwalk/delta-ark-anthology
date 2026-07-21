@@ -83,14 +83,21 @@ img {
    and carries no information, so it is hidden from assistive tech and ignores
    pointer events entirely. */
 
-.scene-backdrop {
+.scene-backdrop,
+.ship-backdrop {
   position: fixed;
   inset: 0;
   width: 100%;
   height: 100%;
   display: block;
   z-index: 0;
+  /* The ship frame runs OrbitControls; without this it would capture every
+     drag and scroll aimed at the listing sitting above it. */
   pointer-events: none;
+}
+
+.ship-backdrop {
+  border: 0;
 }
 
 .site-header,
