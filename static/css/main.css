@@ -91,13 +91,30 @@ img {
   height: 100%;
   display: block;
   z-index: 0;
-  /* The ship frame runs OrbitControls; without this it would capture every
-     drag and scroll aimed at the listing sitting above it. */
+}
+
+/* The lattice is driven entirely by hovering the listing, so it never needs
+   pointer events of its own. */
+.scene-backdrop {
   pointer-events: none;
 }
 
 .ship-backdrop {
   border: 0;
+}
+
+/* The ship runs OrbitControls, so it does need them. The content layer sits
+   above it and would otherwise absorb every drag across its whole box — even
+   where it is visually empty, since a transparent box is still a hit target.
+   Turning pointer events off on the containers and back on for the links
+   alone lets drags reach the ship while the listing stays clickable. */
+.toc-ship main,
+.toc-ship .site-header {
+  pointer-events: none;
+}
+
+.toc-ship a {
+  pointer-events: auto;
 }
 
 .site-header,
