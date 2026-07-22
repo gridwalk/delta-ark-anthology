@@ -98,34 +98,46 @@ function buildArtistPages(artists) {
   }
 }
 
-/* Two listings over the same artists, differing only in backdrop: /toc/ frames
-   the ship, /toc-lattice/ keeps the three.js placeholder grid and its
-   hover-to-frame camera. The markup itself comes from one shared include. */
+/* The listing is the homepage. It renders at the site root with the ship
+   backdrop; /toc-lattice/ keeps the three.js placeholder grid and its
+   hover-to-frame camera. Both come from one shared include.
+
+   /toc/ was the listing's old home, so it stays as a redirect rather than a
+   404 — links and bookmarks to it still land on the homepage. */
 function buildTOC(artists) {
   const pages = [
-    { dir: 'toc', template: 'toc.njk', page: 'toc' },
-    { dir: 'toc-lattice', template: 'toc-lattice.njk', page: 'toc-lattice' },
+    { file: 'index.html', template: 'toc.njk', page: 'toc' },
+    { file: 'toc-lattice/index.html', template: 'toc-lattice.njk', page: 'toc-lattice' },
   ];
 
-  for (const { dir, template, page } of pages) {
-    const outDir = path.join(DIST_DIR, dir);
-    ensureDir(outDir);
-    fs.writeFileSync(
-      path.join(outDir, 'index.html'),
-      env.render(template, { artists, page })
-    );
-    console.log(`  Built: ${dir}/index.html`);
+  for (const { file, template, page } of pages) {
+    const outPath = path.join(DIST_DIR, file);
+    ensureDir(path.dirname(outPath));
+    fs.writeFileSync(outPath, env.render(template, { artists, page }));
+    console.log(`  Built: ${file}`);
   }
-}
 
-function buildHomepage() {
-  const homeSrc = path.join(TEMPLATES_DIR, 'home.html');
-  if (!fs.existsSync(homeSrc)) {
-    console.warn('  Warning: templates/home.html not found, skipping homepage');
-    return;
-  }
-  fs.copyFileSync(homeSrc, path.join(DIST_DIR, 'index.html'));
-  console.log('  Built: index.html');
+  // Static-host redirect: no server to send a 301, so refresh + replace.
+  const redirect = path.join(DIST_DIR, 'toc', 'index.html');
+  ensureDir(path.dirname(redirect));
+  fs.writeFileSync(
+    redirect,
+    `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Delta Ark Anthology</title>
+  <link rel="canonical" href="/">
+  <meta http-equiv="refresh" content="0; url=/">
+</head>
+<body>
+  <p>This page has moved to the <a href="/">Delta Ark Anthology</a>.</p>
+  <script>location.replace('/');</script>
+</body>
+</html>
+`
+  );
+  console.log('  Built: toc/index.html (redirect to /)');
 }
 
 function copyStatic() {
@@ -208,7 +220,6 @@ function build() {
 
   buildArtistPages(artists);
   buildTOC(artists);
-  buildHomepage();
   copyStatic();
   copyVendor();
   copyEmbeds();
