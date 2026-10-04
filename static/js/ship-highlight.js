@@ -45,10 +45,24 @@
     }
   });
 
-  // A click on a panel flies the main view to that panel's view.
+  // A click on a panel flies the main view to that panel's view. While the
+  // pointer is over a panel, the rectangle inside it follows the pointer;
+  // the position goes as shares of the panel's inner box from its top left.
   panels.forEach(function (panel, index) {
     panel.addEventListener('click', function () {
       post({ type: 'ship:view', index: index });
+    });
+    panel.addEventListener('mousemove', function (event) {
+      var r = panel.getBoundingClientRect();
+      post({
+        type: 'ship:cursor',
+        index: index,
+        x: (event.clientX - r.left - panel.clientLeft) / panel.clientWidth,
+        y: (event.clientY - r.top - panel.clientTop) / panel.clientHeight,
+      });
+    });
+    panel.addEventListener('mouseleave', function () {
+      post({ type: 'ship:cursor', index: index, x: null });
     });
   });
 
