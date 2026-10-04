@@ -16,7 +16,7 @@ const chokidar = require('chokidar');
 
 const DIST = path.join(__dirname, 'dist');
 const PORT = Number(process.env.PORT) || 8080;
-const WATCH = ['artists', 'templates', 'static', 'build.js'];
+const WATCH = ['artists', 'templates', 'static', 'embeds', 'build.js'];
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
