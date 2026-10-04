@@ -41,14 +41,17 @@ html {
 
 * {
   font-size: 1rem;
-  font-weight: 400;
+  font-weight: 200;
+  /* Martian Mono at 75% width: the condensed cut, which sets taller and
+     narrower than the default. */
+  font-stretch: 75%;
 }
 
 /* Everything is monospace. "Noto Sans SC" trails the stack only for CJK, which
-   Noto Sans Mono does not cover — Google Fonts serves no monospace CJK face.
+   Martian Mono does not cover — Google Fonts serves no monospace CJK face.
    CJK glyphs are full-width and uniform, so they still set to an even rhythm. */
 body {
-  font-family: "Noto Sans Mono", "Noto Sans SC", monospace;
+  font-family: "Martian Mono", "Noto Sans SC", monospace;
   font-style: normal;
   /* A length, not a ratio, so the TOC height cap resolves to exact line boxes.
      Safe here because every element on the site is the same font size. */
