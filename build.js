@@ -149,6 +149,15 @@ function buildTypeSpecimen(artists) {
   console.log('  Built: type/index.html');
 }
 
+/* The about page. A placeholder for now: the sea backdrop and a framed
+   block of text. */
+function buildAbout() {
+  const outPath = path.join(DIST_DIR, 'about', 'index.html');
+  ensureDir(path.dirname(outPath));
+  fs.writeFileSync(outPath, env.render('about.njk', { page: 'about' }));
+  console.log('  Built: about/index.html');
+}
+
 function copyStatic() {
   if (!fs.existsSync(STATIC_DIR)) return;
   copyDir(STATIC_DIR, path.join(DIST_DIR, 'static'));
@@ -230,6 +239,7 @@ function build() {
   buildArtistPages(artists);
   buildTOC(artists);
   buildTypeSpecimen(artists);
+  buildAbout();
   copyStatic();
   copyVendor();
   copyEmbeds();

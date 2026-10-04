@@ -508,3 +508,31 @@ code, pre, kbd, samp {
   border-bottom-color: var(--black);
 }
 
+
+/* About page */
+
+/* The box sits in the middle of the window, over the sea. The section fills
+   the height the body padding and the header leave: the header is one line
+   plus its link's padding above and below. */
+.about {
+  min-height: calc(100dvh - 3rem - var(--line) - var(--pad-y) * 2);
+  display: grid;
+  place-items: center;
+}
+
+.about-box {
+  max-width: 66ch;
+  padding: calc(var(--pad-y) * 4) calc(var(--pad-x) * 4);
+  border: 1px solid var(--sea-green);
+  background: var(--black);
+}
+
+.about-box h1 {
+  margin-bottom: var(--line);
+  color: var(--sea-green);
+  text-align: center;
+}
+
+.about-box p + p {
+  margin-top: var(--line);
+}
