@@ -4,6 +4,15 @@
 
 {% block bodyClass %}artist-page{% endblock %}
 
+{# The homepage's title box stands in for the site header: the name links
+   home, and the "?" links to the about page. #}
+{% block header %}
+<header class="site-header site-title title-box">
+  <a href="/" class="title-box-name">Delta Ark Anthology</a>
+  <a href="/about/" class="title-box-about" aria-label="About">?</a>
+</header>
+{% endblock %}
+
 {% block content %}
 {% set hasMedia = artist.video_url or artist.featured_image %}
 

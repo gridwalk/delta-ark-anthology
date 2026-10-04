@@ -160,6 +160,21 @@ code, pre, kbd, samp {
 
 /* Artist page */
 
+/* The title box as the page header: two lines tall less the inset, the same
+   as on the homepage, and as wide as the prose column. The small gap below it
+   matches the one under the homepage's title box. */
+.artist-page .site-title {
+  height: calc(var(--line) * 2 - var(--pad-y) * 2);
+  max-width: 66ch;
+  margin-bottom: calc(var(--pad-y) * 2);
+}
+
+/* The sea runs behind the artist pages, so every panel gets a solid black
+   ground to keep its text readable. */
+.artist-page .panel {
+  background-color: var(--black);
+}
+
 /* Text-only pages stay a single measured column. Pages with media become two
    columns — prose left, media right — so the video fills what was empty space.
    The aside is offset from the prose column by a gap. */
@@ -235,42 +250,19 @@ code, pre, kbd, samp {
   border: 0;
 }
 
-/* Inverted blocks, screened back to a halftone. A 2px tile with two opposing
-   colored quadrants gives a checkerboard — every other pixel is inked, the rest
-   transparent, so the black ground reads through at 50%. Hard color stops keep
-   the pixels crisp rather than blurring into a solid mid-tone.
-   Each block sets --halftone; the pattern itself is written once. */
-.artist-header,
-.artist-work {
-  background-color: transparent;
-  background-image: repeating-conic-gradient(
-    var(--halftone) 0% 25%,
-    transparent 0% 50%
-  );
-  background-size: 2px 2px;
-}
-
+/* The artist block: the name and its details, framed in peach red the way
+   the title box above it is framed in sea green. */
 .artist-header {
-  --halftone: var(--peach-red);
+  border: 1px solid var(--peach-red);
 }
 
-.artist-work {
-  --halftone: var(--sea-green);
+.artist-name {
+  color: var(--peach-red);
 }
 
-/* The halftone halves the ink behind the text, so contrast suffers. A halo in
-   the block's own color pools solid ink right around the glyphs — the letters
-   sit on 100% color instead of a 50% dither, while the block still reads as a
-   screen from any distance. The class beats the universal weight lock. */
-.artist-name,
+/* The work title, as plain sea-green text. */
 .artist-work-title {
-  color: var(--black);
-  font-weight: 700;
-  text-shadow:
-    0 0 1px var(--halftone),
-    0 0 2px var(--halftone),
-    0 0 4px var(--halftone),
-    0 0 6px var(--halftone);
+  color: var(--sea-green);
 }
 
 .artist-body h2 {

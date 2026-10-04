@@ -23,13 +23,13 @@
     <canvas id="scene" class="scene-backdrop" data-count="{{ artists | length }}" aria-hidden="true"></canvas>
   {% endif %}
 
-  {% if page == 'toc' or page == 'about' %}
+  {% if page == 'toc' or page == 'about' or page == 'artist' %}
     {# The ship is a self-contained WebGPU build with its own render loop, so
        it is framed rather than imported. pointer-events are disabled in CSS so
        its OrbitControls never swallow clicks meant for the listing above.
        On the homepage, ?groups= sets aside one group of buildings per listing
-       entry, which ship-highlight.js lights on hover. On the about page,
-       ?ship=0 leaves the sea alone, with no ship. #}
+       entry, which ship-highlight.js lights on hover. On the about and artist
+       pages, ?ship=0 leaves the sea alone, with no ship. #}
     <iframe
       class="ship-backdrop"
       src="{% if page == 'toc' %}/ship/?groups={{ artists | length }}{% else %}/ship/?ship=0{% endif %}"
