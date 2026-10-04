@@ -26,10 +26,12 @@
   {% if page == 'toc' %}
     {# The ship is a self-contained WebGPU build with its own render loop, so
        it is framed rather than imported. pointer-events are disabled in CSS so
-       its OrbitControls never swallow clicks meant for the listing above. #}
+       its OrbitControls never swallow clicks meant for the listing above.
+       ?groups= sets aside one group of buildings per listing entry, which
+       ship-highlight.js lights on hover. #}
     <iframe
       class="ship-backdrop"
-      src="/ship/"
+      src="/ship/?groups={{ artists | length }}"
       title="Arcology ship"
       tabindex="-1"
       aria-hidden="true"
