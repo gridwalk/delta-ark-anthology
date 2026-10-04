@@ -39,11 +39,14 @@
     ></iframe>
   {% endif %}
 
+  {# The homepage replaces this with a title cell in the listing itself. #}
+  {% block header %}
   <header class="site-header">
     <nav class="site-nav">
       <a href="/" class="nav-home">Delta Ark Anthology</a>
     </nav>
   </header>
+  {% endblock %}
 
   <main>
     {% block content %}{% endblock %}

@@ -314,6 +314,140 @@ code, pre, kbd, samp {
   column-gap: 2rem;
 }
 
+/* The title box: the site name and a "?" link to the about page, framed in
+   sea green. The homepage sets it in the listing; the artist pages use it as
+   their header. */
+.title-box {
+  display: flex;
+  border: 1px solid var(--sea-green);
+  color: var(--sea-green);
+}
+
+/* The name takes the space the about link leaves, centred top to bottom and
+   set to the left. Its inset matches the about link's margin. */
+.title-box-name {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  padding-left: calc(var(--pad-y) * 2);
+  color: var(--sea-green);
+  text-decoration: none;
+}
+
+/* A box at the right end of the title box, inset by a small margin so it
+   reads as a box inside a box. The flex row stretches its height to the
+   title box less the margins. The width is fixed, about 77px at the 11px
+   root size. */
+.title-box-about {
+  flex: none;
+  width: 7rem;
+  margin: calc(var(--pad-y) * 2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--sea-green);
+  color: var(--sea-green);
+  text-decoration: none;
+}
+
+/* Where the name is a link, as on the artist pages, it turns white on hover
+   rather than the site's usual peach red. */
+.title-box-name:hover {
+  color: var(--white);
+}
+
+.title-box-about:hover {
+  background: var(--white);
+  color: var(--black);
+}
+
+/* On the homepage the title box sits at the top of the listing's first
+   column. It spans the rows the entries leave spare (--toc-title-rows, set by
+   the template), so every column ends on the same row. The bottom margin
+   shrinks the box, not the rows: a grid item's margin comes out of its own
+   stretched size, so the rows keep their height and the entries below stay
+   on the line grid, with a small gap above the next one. */
+.toc-title {
+  grid-row: span var(--toc-title-rows, 3);
+  margin-bottom: calc(var(--pad-y) * 2);
+}
+
+/* Homepage layout: --toc-columns of listing, then one more column for the
+   ship's fixed views. The listing drops from 3 columns to 2 and then 1 as
+   the screen narrows; each step picks the row and title counts the template
+   worked out for that column count. Wide and medium screens give the panels
+   a column the same width as a listing column. The listing's own grid has
+   the same column gap, so its columns line up with the page columns exactly.
+
+   One listing column needs about 280px for a name, its leader, and a title,
+   which sets the breakpoints: 4 such columns fit from about 1200px, 3 from
+   about 760px. */
+.toc-ship .toc {
+  --toc-columns: 3;
+  --toc-lines: var(--toc-lines-3);
+  --toc-title-rows: var(--toc-title-rows-3);
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  column-gap: 2rem;
+  align-items: start;
+}
+
+@media (max-width: 1200px) {
+  .toc-ship .toc {
+    --toc-columns: 2;
+    --toc-lines: var(--toc-lines-2);
+    --toc-title-rows: var(--toc-title-rows-2);
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* On a phone the listing takes all the width it can, and the panels shrink
+   to a narrow strip down the right edge. */
+@media (max-width: 760px) {
+  .toc-ship .toc {
+    --toc-columns: 1;
+    --toc-lines: var(--toc-lines-1);
+    --toc-title-rows: var(--toc-title-rows-1);
+    grid-template-columns: minmax(0, 1fr) 18vw;
+    column-gap: 1rem;
+  }
+
+  /* The ship runs right behind the single column here, so each row gets a
+     black ground to keep the name and title readable. This ties with
+     .toc-link:hover on specificity and comes before it, so a hovered row
+     still turns white. */
+  .toc-ship .toc-link {
+    background: var(--black);
+  }
+}
+
+.toc-ship .toc-list {
+  grid-column: 1 / -2;
+  grid-template-columns: repeat(var(--toc-columns), minmax(0, 1fr));
+}
+
+/* The ship's fixed views, stacked in the last column from the top of the page
+   to the bottom of the window, inside the body padding. */
+.ship-panel-stack {
+  grid-column: -2;
+  height: calc(100dvh - 3rem);
+  display: flex;
+  flex-direction: column;
+  gap: var(--line);
+  min-height: 0;
+}
+
+/* Empty frames. The ship iframe behind the page draws each view inside one.
+   They take clicks, which fly the main view to theirs, so they opt back in to
+   pointer events (the homepage turns them off on the containers). */
+.ship-panel {
+  flex: 1 1 0;
+  min-height: 0;
+  border: 1px solid var(--sea-green);
+  pointer-events: auto;
+  cursor: pointer;
+}
+
 /* One line per entry, so the row count is also the line count. Titles too long
    for their column are clipped rather than wrapped, which would break the
    fixed height. */

@@ -4,9 +4,33 @@
 
 {% block bodyClass %}toc-page toc-ship{% endblock %}
 
+{# No header: the title sits in the listing's first column instead. #}
+{% block header %}{% endblock %}
+
+{# The listing runs in 3, 2, or 1 columns by screen width (the breakpoints
+   are in main.css). At each count all columns end on the same row: the rows
+   are the fewest that fit every entry plus a title of at least titleMinRows,
+   and the title spans whatever rows the entries leave spare. The counts for
+   each layout go to the stylesheet as --toc-lines-N and --toc-title-rows-N.
+   With 22 entries and titleMinRows 2: 8, 12, or 24 rows, and a 2-row title
+   in each. #}
+{% set titleMinRows = 2 %}
+{% set entries = artists | length %}
+{% set rows3 = ((entries + titleMinRows) / 3) | round(0, "ceil") %}
+{% set rows2 = ((entries + titleMinRows) / 2) | round(0, "ceil") %}
+{% set rows1 = entries + titleMinRows %}
+
 {% block content %}
-<section class="toc">
+<section class="toc" style="--toc-lines-3: {{ rows3 }}; --toc-title-rows-3: {{ rows3 * 3 - entries }}; --toc-lines-2: {{ rows2 }}; --toc-title-rows-2: {{ rows2 * 2 - entries }}; --toc-lines-1: {{ rows1 }}; --toc-title-rows-1: {{ rows1 - entries }}">
   {% include "_toc-list.njk" %}
+
+  {# Frames for the ship's fixed front, side, and top views. They are empty:
+     the ship iframe draws each view into the space inside its frame. #}
+  <div class="ship-panel-stack" aria-hidden="true">
+    <div class="ship-panel"></div>
+    <div class="ship-panel"></div>
+    <div class="ship-panel"></div>
+  </div>
 </section>
 {% endblock %}
 
