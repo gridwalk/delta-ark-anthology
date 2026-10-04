@@ -1,0 +1,174 @@
+{% extends "base.njk" %}
+
+{% block title %}Type specimen &mdash; Delta Ark Anthology{% endblock %}
+
+{% block bodyClass %}type-page{% endblock %}
+
+{# Candidate typefaces: monospace, light, more interface than code. Each sets
+   the listing at its lightest useful weight. `stretch` narrows the families
+   that have a width axis, for a taller look. All load from Google Fonts. #}
+{% set fonts = [
+  { name: "Noto Sans Mono", weight: 200, note: "Current face. Weights 100–900." },
+  { name: "IBM Plex Mono", weight: 200, note: "Weights 100–700, as static cuts." },
+  { name: "JetBrains Mono", weight: 200, note: "Weights 100–800. Tall lowercase." },
+  { name: "Roboto Mono", weight: 200, note: "Weights 100–700." },
+  { name: "Geist Mono", weight: 200, note: "Weights 100–900. Vercel's interface mono." },
+  { name: "Chivo Mono", weight: 200, note: "Weights 100–900. Grotesque shapes." },
+  { name: "Azeret Mono", weight: 200, note: "Weights 100–900. Geometric, wide." },
+  { name: "Martian Mono", weight: 200, stretch: "75%", note: "Weights 100–800. Width axis, shown condensed." },
+  { name: "Inconsolata", weight: 300, stretch: "75%", note: "Weights 200–900. Width axis, shown condensed." },
+  { name: "Source Code Pro", weight: 200, note: "Weights 200–900." },
+  { name: "Red Hat Mono", weight: 300, note: "Weights 300–700." },
+  { name: "DM Mono", weight: 300, note: "Weights 300–500." },
+  { name: "Overpass Mono", weight: 300, note: "Weights 300–700. From highway signage." },
+  { name: "Spline Sans Mono", weight: 300, note: "Weights 300–700." },
+  { name: "Reddit Mono", weight: 200, note: "Weights 200–900." },
+  { name: "Sono", weight: 200, note: "Weights 200–800." },
+  { name: "Victor Mono", weight: 200, note: "Weights 100–700. Narrow and tall." },
+  { name: "Atkinson Hyperlegible Mono", weight: 200, note: "Weights 200–800. Built for legibility." },
+  { name: "B612 Mono", weight: 400, note: "Regular and bold only. Designed for cockpit displays." },
+  { name: "Share Tech Mono", weight: 400, note: "Regular only. Narrow, technical." },
+  { name: "Lekton", weight: 400, note: "Regular and bold only. Narrow and tall." },
+  { name: "Fragment Mono", weight: 400, note: "Regular only. Helvetica shapes in a fixed width." }
+] %}
+
+{% block head %}
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Mono:wght@100..900&family=IBM+Plex+Mono:wght@100;200;300;400&family=JetBrains+Mono:wght@100..800&family=Roboto+Mono:wght@100..700&family=Geist+Mono:wght@100..900&family=Chivo+Mono:wght@100..900&family=Azeret+Mono:wght@100..900&family=Martian+Mono:wdth,wght@75..112.5,100..800&family=Inconsolata:wdth,wght@50..200,200..900&family=Source+Code+Pro:wght@200..900&family=Red+Hat+Mono:wght@300..700&family=DM+Mono:wght@300;400&family=Overpass+Mono:wght@300..700&family=Spline+Sans+Mono:wght@300..700&family=Reddit+Mono:wght@200..900&family=Sono:wght@200..800&family=Victor+Mono:wght@100..700&family=Atkinson+Hyperlegible+Mono:wght@200..800&family=B612+Mono:wght@400&family=Share+Tech+Mono&family=Lekton:wght@400&family=Fragment+Mono&display=swap" rel="stylesheet">
+<style>
+  /* Specimen-only styles. The site sheet sets one size and one weight on
+     every element through the universal selector; the class selectors here
+     outrank it, so each specimen can carry its own face, weight, and size. */
+  .type-controls {
+    display: flex;
+    gap: 2rem;
+    margin-bottom: 3rem;
+    color: var(--neutral-gray);
+  }
+
+  .type-controls button {
+    font: inherit;
+    color: var(--sea-green);
+    background: transparent;
+    border: 0;
+    padding: 0 var(--pad-x);
+    cursor: pointer;
+  }
+
+  .type-controls button[aria-pressed="true"] {
+    background: var(--white);
+    color: var(--black);
+  }
+
+  .spec {
+    margin-bottom: 4.5rem;
+  }
+
+  .spec-label {
+    display: flex;
+    gap: 2rem;
+    margin-bottom: var(--line);
+    color: var(--neutral-gray);
+  }
+
+  .spec-label .spec-name {
+    color: var(--white);
+  }
+
+  /* The sample takes the candidate face. Size and weight come from the
+     controls when set, and otherwise from the face's own lightest weight. */
+  .spec-sample,
+  .spec-sample * {
+    font-family: var(--face), monospace;
+    font-weight: var(--spec-weight, var(--face-weight));
+    font-stretch: var(--face-stretch, 100%);
+    font-size: var(--spec-size, 11px);
+    /* The site's line box is 1.5 times its type size. */
+    --spec-line: calc(var(--spec-size, 11px) * 1.5);
+    line-height: var(--spec-line);
+  }
+
+  .spec-sample .toc-list {
+    --toc-lines: 6;
+    --toc-title-rows: 2;
+    grid-template-rows: repeat(var(--toc-lines), var(--spec-line));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    margin-bottom: var(--line);
+  }
+
+  .spec-sample .spec-large {
+    font-size: calc(var(--spec-size, 11px) * 3);
+    line-height: 1.2;
+  }
+
+  .spec-sample .spec-line {
+    display: block;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<section class="type">
+  <div class="type-controls">
+    <span>Weight
+      <button type="button" data-weight="" aria-pressed="true">lightest</button>
+      <button type="button" data-weight="300" aria-pressed="false">300</button>
+      <button type="button" data-weight="400" aria-pressed="false">400</button>
+    </span>
+    <span>Size
+      <button type="button" data-size="11px" aria-pressed="true">11px</button>
+      <button type="button" data-size="13px" aria-pressed="false">13px</button>
+      <button type="button" data-size="15px" aria-pressed="false">15px</button>
+    </span>
+  </div>
+
+  {% for font in fonts %}
+  <article class="spec" style="--face: '{{ font.name }}'; --face-weight: {{ font.weight }};{% if font.stretch %} --face-stretch: {{ font.stretch }};{% endif %}">
+    <div class="spec-label">
+      <span class="spec-name">{{ loop.index }}. {{ font.name }}</span>
+      <span>shown at {{ font.weight }}{% if font.stretch %}, width {{ font.stretch }}{% endif %}</span>
+      <span>{{ font.note }}</span>
+    </div>
+
+    <div class="spec-sample">
+      {# The homepage listing in miniature: the title box and the first names. #}
+      <ul class="toc-list">
+        <li class="toc-title title-box">
+          <h1 class="title-box-name">Delta Ark Anthology</h1>
+          <a href="/about/" class="title-box-about" aria-label="About">?</a>
+        </li>
+        {% for artist in artists | batch(16) | first %}
+        <li class="toc-entry">
+          <a href="/artists/{{ artist.slug }}/" class="toc-link"><span class="toc-name">{{ artist.name }}</span><span class="toc-leader"></span><span class="toc-work">{{ artist.work_title }}</span></a>
+        </li>
+        {% endfor %}
+      </ul>
+
+      <span class="spec-line spec-large">Delta Ark Anthology</span>
+      <span class="spec-line">ABCDEFGHIJKLMNOPQRSTUVWXYZ abcdefghijklmnopqrstuvwxyz</span>
+      <span class="spec-line">0123456789 ([{ }]) .,:;!? @#&amp;*%/\ — “ ” ‘ ’ → ←</span>
+    </div>
+  </article>
+  {% endfor %}
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Weight and size switches for every specimen at once. They set custom
+  // properties on the root, which the specimen styles read.
+  (function () {
+    var root = document.documentElement;
+    document.querySelectorAll('.type-controls button').forEach(function (button) {
+      button.addEventListener('click', function () {
+        var key = button.dataset.weight !== undefined ? 'weight' : 'size';
+        var value = button.dataset[key];
+        if (value) root.style.setProperty('--spec-' + key, value);
+        else root.style.removeProperty('--spec-' + key);
+        button.parentElement.querySelectorAll('button').forEach(function (other) {
+          other.setAttribute('aria-pressed', String(other === button));
+        });
+      });
+    });
+  })();
+</script>
+{% endblock %}

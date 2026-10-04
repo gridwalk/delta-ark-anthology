@@ -140,6 +140,15 @@ function buildTOC(artists) {
   console.log('  Built: toc/index.html (redirect to /)');
 }
 
+/* Type specimen: an unlisted page at /type/ that sets the listing in each
+   candidate typeface, for choosing a replacement. Nothing links to it. */
+function buildTypeSpecimen(artists) {
+  const outPath = path.join(DIST_DIR, 'type', 'index.html');
+  ensureDir(path.dirname(outPath));
+  fs.writeFileSync(outPath, env.render('type.njk', { artists, page: 'type' }));
+  console.log('  Built: type/index.html');
+}
+
 function copyStatic() {
   if (!fs.existsSync(STATIC_DIR)) return;
   copyDir(STATIC_DIR, path.join(DIST_DIR, 'static'));
@@ -220,6 +229,7 @@ function build() {
 
   buildArtistPages(artists);
   buildTOC(artists);
+  buildTypeSpecimen(artists);
   copyStatic();
   copyVendor();
   copyEmbeds();
