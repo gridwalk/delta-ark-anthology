@@ -18,3 +18,6 @@
 <!-- another project. -->
 
 ## [Unreleased]
+
+### Changed
+- Replaced the placeholder about text with the anthology description, the editors' credit and the partners.

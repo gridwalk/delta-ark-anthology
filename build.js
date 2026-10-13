@@ -149,8 +149,7 @@ function buildTypeSpecimen(artists) {
   console.log('  Built: type/index.html');
 }
 
-/* The about page. A placeholder for now: the sea backdrop and a framed
-   block of text. */
+/* The about page: the sea backdrop and a framed block of text. */
 function buildAbout() {
   const outPath = path.join(DIST_DIR, 'about', 'index.html');
   ensureDir(path.dirname(outPath));
