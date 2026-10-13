@@ -1,0 +1,87 @@
+/* Numbered holds: a layer on top of the homepage, drawn by hold-links.js.
+   It uses only the palette and the one type size from main.css. */
+
+/* Each entry's number, before the name. Gray at rest, black when lit. */
+.toc-num {
+  flex: 0 0 auto;
+  color: var(--neutral-gray);
+}
+
+.toc-link:hover .toc-num,
+.toc-link.is-hot .toc-num {
+  color: var(--black);
+}
+
+/* After a click the entry stays lit as if hovered, wherever the pointer goes. */
+.toc-link.is-hot {
+  background: var(--white);
+}
+
+.toc-link.is-hot .toc-name,
+.toc-link.is-hot .toc-work {
+  color: var(--black);
+}
+
+.toc-link.is-hot .toc-leader {
+  border-bottom-color: var(--black);
+}
+
+/* The line from the lit entry to its apartment, and the tag with its number
+   on the apartment. Above the ship, under the listing's links. */
+.hold-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.hold-line {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  visibility: hidden;
+}
+
+.hold-line polyline {
+  fill: none;
+  stroke: var(--sea-green);
+  stroke-width: 1;
+}
+
+.hold-line rect {
+  fill: var(--sea-green);
+}
+
+/* The same white as the lit entry, so the two read as a pair. */
+.hold-tag {
+  position: absolute;
+  top: 0;
+  left: 0;
+  padding: 0 var(--pad-x);
+  line-height: var(--line);
+  white-space: nowrap;
+  color: var(--black);
+  background: var(--white);
+}
+
+/* During the flight only the clicked entry stays on the page. */
+.holds-leaving .toc-entry:not(.is-picked),
+.holds-leaving .toc-title {
+  visibility: hidden;
+}
+
+/* The cut to black as the artist page loads. */
+.hold-veil {
+  position: fixed;
+  inset: 0;
+  z-index: 2;
+  background: var(--black);
+  pointer-events: none;
+  visibility: hidden;
+}
+
+.hold-veil.is-on {
+  visibility: visible;
+}

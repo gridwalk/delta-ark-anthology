@@ -4,6 +4,8 @@
 
 {% block bodyClass %}toc-page toc-ship{% endblock %}
 
+{% block head %}<link rel="stylesheet" href="/static/css/holds.css">{% endblock %}
+
 {# No header: the title sits in the listing's first column instead. #}
 {% block header %}{% endblock %}
 
@@ -36,4 +38,5 @@
 
 {% block scripts %}
 <script src="/static/js/ship-highlight.js"></script>
+<script src="/static/js/hold-links.js"></script>
 {% endblock %}
