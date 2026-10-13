@@ -18,3 +18,6 @@
 <!-- another project. -->
 
 ## [Unreleased]
+
+### Added
+- Numbered the homepage entries and, while an entry is lit, tagged one of its apartments on the ship with its number and drew a line to it from the entry, and a click now flies the view to that apartment before the artist page opens.
