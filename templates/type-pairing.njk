@@ -1,0 +1,157 @@
+{% extends "base.njk" %}
+
+{% block title %}Headline pairing &mdash; Runtime Season{% endblock %}
+
+{% block bodyClass %}type-page pairing-page{% endblock %}
+
+{# Candidate headline faces: thick, extended sans serifs to pair with the
+   Martian Mono body text. Each one sets the title box and an artwork page
+   header, over the site's real body style. `wdth` uses the family's width
+   axis where it has one. All load from Google Fonts.
+
+   Headlines are always set in capitals. The text stays in its own case in the
+   markup, and CSS sets the capitals, so screen readers and copied text keep
+   the real case. #}
+{% set fonts = [
+  { name: "Archivo", weight: 900, wdth: 125, note: "Width axis 62–125, weights 100–900. Shown at its widest, black." },
+  { name: "Anybody", weight: 800, wdth: 150, note: "Width axis 50–150, weights 100–900. The widest here." },
+  { name: "Mona Sans", weight: 900, wdth: 125, note: "Width axis 75–125, weights 200–900. GitHub's grotesque." },
+  { name: "Hubot Sans", weight: 900, wdth: 125, note: "Width axis 75–125, weights 200–900. Mona Sans's technical sibling." },
+  { name: "Unbounded", weight: 900, note: "Weights 200–900. Wide and round by design." },
+  { name: "Syne", weight: 800, note: "Weights 400–800. Gets wider as it gets heavier." },
+  { name: "Lexend Zetta", weight: 800, note: "Weights 100–900. Lexend with very wide spacing." },
+  { name: "Krona One", weight: 400, note: "One weight. Extended, mid-weight." },
+  { name: "Michroma", weight: 400, note: "One weight. Extended, square, technical." },
+  { name: "Dela Gothic One", weight: 400, note: "One weight. Very heavy, slightly wide." },
+  { name: "Rubik Mono One", weight: 400, note: "One weight. Heavy, wide, all capitals." }
+] %}
+
+{% block head %}
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=Anybody:wdth,wght@50..150,100..900&family=Mona+Sans:wdth,wght@75..125,200..900&family=Hubot+Sans:wdth,wght@75..125,200..900&family=Unbounded:wght@200..900&family=Syne:wght@400..800&family=Lexend+Zetta:wght@100..900&family=Krona+One&family=Michroma&family=Dela+Gothic+One&family=Rubik+Mono+One&display=swap" rel="stylesheet">
+<style>
+  /* Specimen-only styles. The site sheet sets one size and one weight on
+     every element through the universal selector. The class selectors here
+     outrank it, so each headline can carry its own face, weight, width, and
+     size. The body copy keeps the site's own style. */
+  .pairing-intro {
+    max-width: 60ch;
+    margin-bottom: 4.5rem;
+    color: var(--neutral-gray);
+  }
+
+  .pair {
+    margin-bottom: 6rem;
+  }
+
+  .pair-label {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 2rem;
+    margin-bottom: var(--line);
+    color: var(--neutral-gray);
+  }
+
+  .pair-label .pair-name {
+    color: var(--peach-red);
+  }
+
+  /* The two mock-ups side by side: the title box at the width of one listing
+     column, then the artwork header. They stack on a narrow screen. */
+  .pair-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 3fr);
+    gap: 2rem;
+    align-items: start;
+  }
+
+  @media (max-width: 760px) {
+    .pair-row {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  .pairing-page .head {
+    font-family: var(--face), sans-serif;
+    font-weight: var(--weight);
+    font-stretch: var(--wdth, 100%);
+    font-variation-settings: "wdth" var(--wdth-axis, 100);
+    line-height: 1;
+    letter-spacing: 0;
+    text-transform: uppercase;
+  }
+
+  /* The title box, as on the homepage, with the name in the headline face. */
+  .mock-title {
+    height: calc(var(--line) * 4);
+  }
+
+  .mock-title .head {
+    font-size: 1.9rem;
+    color: var(--sea-green);
+  }
+
+  .mock-title .title-box-about {
+    pointer-events: none;
+  }
+
+  .mock-artwork .head-name {
+    font-size: 4.2rem;
+    color: var(--white);
+    margin-bottom: 0.6rem;
+    overflow-wrap: anywhere;
+  }
+
+  .mock-artwork .head-work {
+    font-size: 2.4rem;
+    color: var(--sea-green);
+    margin-bottom: var(--line);
+    overflow-wrap: anywhere;
+  }
+
+  .mock-artwork .meta {
+    color: var(--neutral-gray);
+  }
+
+  .mock-artwork .excerpt {
+    max-width: 70ch;
+  }
+
+  .pairing-page .alphabet {
+    margin-top: calc(var(--line) * 1.5);
+    font-size: 2rem;
+    line-height: 1.2;
+    color: var(--white);
+    overflow-wrap: anywhere;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<p class="pairing-intro">Headline candidates for the title box and the artwork pages, each with the body text in Martian Mono at its current settings. The sample artist is {{ sample.name }}.</p>
+
+{% for font in fonts %}
+<section class="pair" style="--face: '{{ font.name }}'; --weight: {{ font.weight }};{% if font.wdth %} --wdth: {{ font.wdth }}%; --wdth-axis: {{ font.wdth }};{% endif %}">
+  <p class="pair-label">
+    <span class="pair-name">{{ font.name }}</span>
+    <span>weight {{ font.weight }}{% if font.wdth %}, width {{ font.wdth }}{% endif %}</span>
+    <span>{{ font.note }}</span>
+  </p>
+
+  <div class="pair-row">
+    <div class="mock-title title-box">
+      <span class="title-box-name"><span class="head">Runtime Season</span></span>
+      <span class="title-box-about">?</span>
+    </div>
+
+    <div class="mock-artwork">
+      <p class="head head-name">{{ sample.name }}</p>
+      <p class="head head-work">{{ sample.work_title }}</p>
+      <p class="meta">{{ [sample.year, sample.country, sample.medium] | select | join(" · ") or "Year · Country · Medium" }}</p>
+      <p class="excerpt">{{ sample.excerpt }}</p>
+    </div>
+  </div>
+
+  <p class="head alphabet">ABCDEFGHIJKLMNOPQRSTUVWXYZ ÁÉÍÑÖÜ 0123456789 ?!&amp;:–</p>
+</section>
+{% endfor %}
+{% endblock %}

@@ -93,6 +93,10 @@ function loadArtists() {
       thumb: thumbSize
         ? { src: `/artists/${folder.name}/images/poster-thumb.jpg`, ...thumbSize }
         : null,
+      // The full poster, for the artwork view when there is no video.
+      poster: fs.existsSync(path.join(ARTISTS_DIR, folder.name, 'images', 'poster.jpg'))
+        ? `/artists/${folder.name}/images/poster.jpg`
+        : null,
     });
   }
 
@@ -109,6 +113,7 @@ function loadArtists() {
 // ── Build steps ──────────────────────────────────────────────────────────────
 
 function buildArtistPages(artists) {
+  // Each artist URL is the homepage in its collapsed state (see below).
   for (const artist of artists) {
     const outDir = path.join(DIST_DIR, 'artists', artist.slug);
     ensureDir(outDir);
@@ -119,7 +124,11 @@ function buildArtistPages(artists) {
       copyDir(imagesDir, path.join(outDir, 'images'));
     }
 
-    const html = env.render('artist.njk', { artist, page: 'artist' });
+    // An artist URL serves the homepage with that artist selected, so a
+    // reload shows the same view as the in-page navigation (see page-nav.js).
+    // The listing starts collapsed. artist.njk is kept for the artist
+    // content, which is the next step.
+    const html = env.render('toc.njk', { artists, selected: artist, page: 'toc' });
     fs.writeFileSync(path.join(outDir, 'index.html'), html);
     console.log(`  Built: artists/${artist.slug}/index.html`);
   }
@@ -174,6 +183,25 @@ function buildTypeSpecimen(artists) {
   ensureDir(path.dirname(outPath));
   fs.writeFileSync(outPath, env.render('type.njk', { artists, page: 'type' }));
   console.log('  Built: type/index.html');
+}
+
+/* Headline pairing specimen: an unlisted page at /type/pairing/ that sets
+   candidate headline faces with the Martian Mono body text. The sample artist
+   has a name in letters, with an accent to test the glyph cover, and a work
+   title with a colon and mixed case. */
+const PAIRING_SAMPLE = 'leo-castaneda';
+function buildTypePairing(artists) {
+  const sample = artists.find((a) => a.slug === PAIRING_SAMPLE) || artists[0];
+  // A plain-text excerpt of the body, about two short paragraphs long.
+  const text = (sample.body || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+  const excerpt = text.length > 420 ? text.slice(0, 420).replace(/\s+\S*$/, '') + '…' : text;
+  const outPath = path.join(DIST_DIR, 'type', 'pairing', 'index.html');
+  ensureDir(path.dirname(outPath));
+  fs.writeFileSync(
+    outPath,
+    env.render('type-pairing.njk', { artists, sample: { ...sample, excerpt }, page: 'type' })
+  );
+  console.log('  Built: type/pairing/index.html');
 }
 
 /* The about page. A placeholder for now: the sea backdrop and a framed
@@ -266,6 +294,7 @@ function build() {
   buildArtistPages(artists);
   buildTOC(artists);
   buildTypeSpecimen(artists);
+  buildTypePairing(artists);
   buildAbout();
   copyStatic();
   copyVendor();
