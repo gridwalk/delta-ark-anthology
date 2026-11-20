@@ -25,6 +25,13 @@ export const shownNode = () => {
   return select(clock.greaterThanEqual(vis.z), vis.y, vis.x).greaterThan(0.5);
 };
 
+/** True if module `n` of `cargo` is in view at time `now`. */
+export function isShown(cargo, n, now) {
+  const state = cargo.userData.visibility;
+  if (!state) return true;
+  return (now >= state.at[n] ? state.to[n] : state.from[n]) === 1;
+}
+
 /** Adds the `vis` attribute to a cargo mesh from createCargo. All shown. */
 export function initVisibility(cargo) {
   const { modules, moduleRanges } = cargo.userData;

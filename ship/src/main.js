@@ -9,11 +9,12 @@ import { createFill } from './fill.js';
 import { createModuleView } from './modules.js';
 import { createHighlight } from './highlight.js';
 import { createDrop } from './drop.js';
-import { clock, transition } from './visibility.js';
+import { clock, isShown, transition } from './visibility.js';
 import { chooseKept } from './cargo.js';
 import { createPanels, fitView, VIEWS } from './panels.js';
 import { createFlight } from './flight.js';
 import { createDitherParams, dither } from './dither.js';
+import { createSmearParams, smear } from './smear.js';
 
 // Every stroke in the frame -- hull, cargo, water grid, above and below the
 // waterline -- is drawn in this one colour at one weight.
@@ -59,11 +60,26 @@ const PIXEL_SCALE = Math.min(window.devicePixelRatio, 2);
 // - tiles.lineWeight: the stroke weight in the three tiles, as a multiple of
 //   the main view's weight. Thicker lines keep more of their shape through
 //   the dither.
+// - smear.step: pixels that the smear moves on each step.
+// - smear.rects: the number of rectangles, up to 16.
+// - smear.size: the largest rectangle, as a share of the smear area.
+// - smear.clearBlack: 1 makes black pixels in the moved copy transparent, so
+//   only the bright lines leave trails. 0 moves the whole copy.
+// - camera.spin: the speed of the automatic rotation. 2 is one turn in 30
+//   seconds, so 0.5 is one turn in 2 minutes. A negative value turns the
+//   other way.
+// - camera.hold: seconds that the camera stays at a tile's view after a
+//   flight, before it starts back to the start height.
+// - camera.settle: how fast the camera goes back to the start height,
+//   distance, and look-at point, per second. 0.25 covers most of the way in
+//   about 10 seconds.
 const TUNE = {
   dither: { levels: 2, dot: 1, strength: 1 },
-  fog: { front: 1.05, back: 3.15, curve: 4 },
+  fog: { front: 1, back: 4.25, curve: 2.3 },
   cargo: { keep: 0.9, build: 40, overlap: 1 },
-  tiles: { fogPush: 1, lineWeight: 4.25 },
+  tiles: { fogPush: 2.2, lineWeight: 3 },
+  smear: { step: 1, rects: 16, size: 0.15, clearBlack: 1 },
+  camera: { spin: 0.15, hold: 0, settle: 0.1 },
 };
 
 // ?dither=1 puts an ordered dither on every view (see dither.js).
@@ -77,6 +93,15 @@ const DITHER = new URLSearchParams(window.location.search).get('dither') === '1'
 // only with the dither.
 const fogCurve = uniform(TUNE.fog.curve);
 
+// PROTOTYPE: the pixel smear on the main view, driven by the tile hover (see
+// smear.js and the render loop).
+const SMEAR = createSmearParams();
+// The start values come from TUNE, so the page without the tuner uses them.
+SMEAR.step.value = TUNE.smear.step;
+SMEAR.rects.value = TUNE.smear.rects;
+SMEAR.size.value = TUNE.smear.size;
+SMEAR.clearBlack.value = TUNE.smear.clearBlack;
+
 function applyTune(next) {
   for (const group of Object.keys(TUNE)) {
     for (const key of Object.keys(TUNE[group])) {
@@ -84,6 +109,11 @@ function applyTune(next) {
       if (Number.isFinite(value)) TUNE[group][key] = value;
     }
   }
+  controls.autoRotateSpeed = TUNE.camera.spin;
+  SMEAR.step.value = TUNE.smear.step;
+  SMEAR.rects.value = TUNE.smear.rects;
+  SMEAR.size.value = TUNE.smear.size;
+  SMEAR.clearBlack.value = TUNE.smear.clearBlack;
   if (!DITHER) return;
   DITHER.levels.value = TUNE.dither.levels;
   DITHER.dot.value = Math.max(1, Math.round(TUNE.dither.dot * PIXEL_SCALE));
@@ -121,6 +151,20 @@ controls.enableDamping = true;
 controls.target.set(0, 2.2, 0);
 controls.minDistance = 4;
 controls.maxDistance = 120;
+// No manual orbit, zoom, or pan. The camera turns slowly around the ship by
+// itself, from the start view, at the same height and distance. A flight to
+// a tile's view keeps the turn going from that view.
+controls.enableRotate = false;
+controls.enableZoom = false;
+controls.enablePan = false;
+controls.autoRotate = true;
+controls.autoRotateSpeed = TUNE.camera.spin;
+
+// The start view, which the camera always drifts back to (see settleCamera).
+const START_TARGET = controls.target.clone();
+const START_VIEW = new THREE.Spherical().setFromVector3(
+  camera.position.clone().sub(controls.target),
+);
 
 // A solid surface, not just lines: the compositor occludes by depth, so the
 // water needs to write depth everywhere, not only where a line happens to fall.
@@ -227,7 +271,9 @@ const LINE_THICKNESS = 0.44;
 //
 // With `tile`, the frame is one of the three tiles: it uses TUNE.tiles for
 // the fog push and the line weight.
-function buildPipeline(target, viewCamera, { sea = true, depthThreshold, backdrop, hover, tile = false } = {}) {
+//
+// `smearParams` puts the pixel smear on the frame (see smear.js).
+function buildPipeline(target, viewCamera, { sea = true, depthThreshold, backdrop, hover, tile = false, smearParams = null } = {}) {
   const fog = DITHER ? { near: uniform(0), far: uniform(1), curve: fogCurve } : null;
   const setFocus = (focus) => {
     // Set here because setFocus runs each frame, so a dial change shows at once.
@@ -264,19 +310,20 @@ function buildPipeline(target, viewCamera, { sea = true, depthThreshold, backdro
     hover ? mix(color(LINE_COLOR), color(HIGHLIGHT_COLOR), hover) : null,
     fog,
   );
-  if (DITHER) {
-    // The dither needs display values, so apply the colour transform first
-    // and tell the pipeline not to apply it again.
-    result.outputColorTransform = false;
-    // The tile backdrop lines are dotted already, so they skip the dither.
-    result.outputNode = dither(renderOutput(frame), DITHER, outline.undithered);
-  } else {
-    result.outputNode = frame;
-  }
+  // The smear and the dither need display values, so apply the colour
+  // transform first and tell the pipeline not to apply it again.
+  result.outputColorTransform = false;
+  let out = renderOutput(frame);
+  // The smear goes before the dither, so the smeared image gets the dither
+  // too.
+  if (smearParams) out = smear(out, smearParams);
+  // The tile backdrop lines are dotted already, so they skip the dither.
+  if (DITHER) out = dither(out, DITHER, outline.undithered);
+  result.outputNode = out;
   return { pipeline: result, outline, setFocus };
 }
 
-const { pipeline, outline, setFocus } = buildPipeline(renderer, camera);
+const { pipeline, outline, setFocus } = buildPipeline(renderer, camera, { smearParams: SMEAR });
 
 // Fixed front, side, and top views, laid over frames on the framing page.
 // Built only when a page asks for them, so the ship alone stays one view.
@@ -290,14 +337,16 @@ function onMessage(event) {
   // { type: 'ship:panels', rects: [{ x, y, width, height }, ...] } lays the
   // front, side, and top views over those rectangles, in that order.
   // { type: 'ship:view', index } flies the main camera to the panel view at
-  // that index: 0 front, 1 side, 2 top. The cargo layout stays the same.
+  // that index: 0 front, 1 side, 2 top. The cargo layout stays the same. A
+  // second click on the same tile soon after flies to the reverse view (see
+  // viewForClick).
   // { type: 'ship:tune', dither: {...}, fog: {...} } sets the TUNE values.
   if (event.data?.type === 'ship:tune') {
     applyTune(event.data);
     return;
   }
   if (event.data?.type === 'ship:view') {
-    flyToView(VIEWS[event.data.index]);
+    flyToView(viewForClick(event.data.index));
     return;
   }
   // { type: 'ship:cursor', index, x, y } points that panel's rectangle at the
@@ -319,8 +368,13 @@ function onMessage(event) {
     return;
   }
   if (event.data?.type !== 'ship:highlight') return;
+  setGroup(event.data.group);
+}
+
+// Lights `group` on the ship, or clears the light with null. A hovered name
+// in the listing and a hovered container on the ship both come here.
+function setGroup(group) {
   const { cargo } = ship.userData;
-  const group = event.data.group;
   const next = Number.isInteger(group) && group >= 0 && group < cargo.userData.groupCount ? group : null;
   highlight.set(next);
 
@@ -349,6 +403,100 @@ function onMessage(event) {
   drop.start(cargo, next, kept, Math.max(hideTime, retractTime) * (1 - overlap));
 }
 window.addEventListener('message', onMessage);
+
+// EXPERIMENT: two-way navigation. A container under the pointer lights its
+// group, the same as a hover on that group's name, and the framing page
+// marks the name with { type: 'ship:hover', group }.
+//
+// The pick casts a ray from the pointer against the grid box of each
+// container in view. A hover hides some containers, so the ray can suddenly
+// pass through to a container of another group. Thus a change waits a short
+// time: PICK_SWITCH to go to another group, PICK_CLEAR to go to none. A
+// short pass over a gap does not flicker the light.
+const PICK_SWITCH = 0.25; // seconds
+const PICK_CLEAR = 0.35; // seconds
+const pointer = { x: 0, y: 0, inside: false };
+const pickRay = new THREE.Ray();
+const pickInverse = new THREE.Matrix4();
+const pickNdc = new THREE.Vector2();
+const pickBox = new THREE.Box3();
+const pickHit = new THREE.Vector3();
+const raycaster = new THREE.Raycaster();
+let shipHover = null; // the group that the pointer lit, or null
+let pickPending = null;
+let pickSince = 0;
+
+window.addEventListener('pointermove', (event) => {
+  pointer.x = event.clientX;
+  pointer.y = event.clientY;
+  pointer.inside = true;
+});
+// The pointer left the ship, maybe onto a name in the listing. The ship drops
+// its own hover at once, without a delay, and does not clear the light
+// itself: the framing page clears it, but only if no name has the hover.
+document.documentElement.addEventListener('mouseleave', () => {
+  pointer.inside = false;
+  document.body.style.cursor = '';
+  if (shipHover === null) return;
+  shipHover = null;
+  pickPending = null;
+  if (window.parent !== window) {
+    window.parent.postMessage({ type: 'ship:hover', group: null, left: true }, window.location.origin);
+  } else {
+    setGroup(null);
+  }
+});
+
+// The group of the nearest container in view under the pointer, or null.
+function pickGroup() {
+  if (!pointer.inside || !ship.visible) return null;
+  const { cargo } = ship.userData;
+  const { boxes, moduleGroup } = cargo.userData;
+  if (!boxes) return null;
+
+  pickNdc.set((pointer.x / window.innerWidth) * 2 - 1, -(pointer.y / window.innerHeight) * 2 + 1);
+  raycaster.setFromCamera(pickNdc, camera);
+  cargo.updateWorldMatrix(true, false);
+  pickInverse.copy(cargo.matrixWorld).invert();
+  pickRay.copy(raycaster.ray).applyMatrix4(pickInverse);
+
+  const now = clock.value;
+  let best = Infinity;
+  let group = null;
+  for (let n = 0; n < moduleGroup.length; n++) {
+    if (moduleGroup[n] < 0 || !isShown(cargo, n, now)) continue;
+    pickBox.min.fromArray(boxes, n * 6);
+    pickBox.max.fromArray(boxes, n * 6 + 3);
+    if (!pickRay.intersectBox(pickBox, pickHit)) continue;
+    const distance = pickHit.distanceToSquared(pickRay.origin);
+    if (distance < best) {
+      best = distance;
+      group = moduleGroup[n];
+    }
+  }
+  return group;
+}
+
+function updatePick(time) {
+  const candidate = pickGroup();
+  document.body.style.cursor = candidate === null ? '' : 'pointer';
+  if (candidate === shipHover) {
+    pickPending = shipHover;
+    pickSince = time;
+    return;
+  }
+  if (candidate !== pickPending) {
+    pickPending = candidate;
+    pickSince = time;
+  }
+  const wait = candidate === null ? PICK_CLEAR : shipHover === null ? 0 : PICK_SWITCH;
+  if (time - pickSince < wait) return;
+  shipHover = candidate;
+  setGroup(candidate);
+  if (window.parent !== window) {
+    window.parent.postMessage({ type: 'ship:hover', group: candidate }, window.location.origin);
+  }
+}
 
 // Tells the framing page the ship is running, so it can send its panel frames.
 if (window.parent !== window) {
@@ -403,6 +551,22 @@ const flight = createFlight(camera, controls);
 // Breathing room around the ship when the main view frames a panel view.
 const VIEW_MARGIN = 1.15;
 
+// A second click on the same tile within REVERSE_WINDOW seconds of the last
+// one gives the reverse view: from the stern, from the other side, or from
+// below. A further click in time flips back again.
+const REVERSE_WINDOW = 3; // seconds
+const lastViewClick = { index: null, time: -Infinity, reversed: false };
+function viewForClick(index) {
+  const view = VIEWS[index];
+  if (!view) return null;
+  const now = performance.now() / 1000;
+  const again = lastViewClick.index === index && now - lastViewClick.time < REVERSE_WINDOW;
+  lastViewClick.reversed = again ? !lastViewClick.reversed : false;
+  lastViewClick.index = index;
+  lastViewClick.time = now;
+  return lastViewClick.reversed ? { ...view, from: view.from.clone().negate() } : view;
+}
+
 // Flies the main camera to frame the ship in one of the panel views. The fit
 // uses the open space left of the panels, which the view offset centres the
 // image in.
@@ -418,14 +582,110 @@ function flyToView(view) {
   flight.fly(position, center);
 }
 
+// The hovered tile drives the smear. The tile's rectangle maps to the same
+// place in the main view, inside the free space left of the tiles, and the
+// smear stays inside that area. The direction goes from the tile's centre,
+// where the ship is, to the rectangle. The strength grows with the distance
+// and eases in and out. It sets the odds of a step on each frame.
+//
+// The rectangles get new places only when the pointer enters a tile or moves
+// to another tile. While the pointer stays in one tile, they stay in place.
+const SMEAR_EASE = 8; // per second
+let smearTile = null;
+let smearCount = 0;
+function updateSmear(time, delta) {
+  const tile = panels.hovered();
+  const index = tile ? tile.index : null;
+  if (index !== null && index !== smearTile) SMEAR.seed.value = Math.random() * 1000;
+  smearTile = index;
+  let target = 0;
+  if (tile) {
+    const c = tile.centre;
+    target = Math.min(1, Math.max(Math.abs(c.x), Math.abs(c.y)) / tile.limit);
+    const length = c.length();
+    if (length > 1e-4) SMEAR.direction.value.set(c.x / length, c.y / length);
+    const free = freeWidth ? freeWidth / window.innerWidth : 1;
+    SMEAR.centre.value.set(free * (0.5 + c.x), 0.5 + c.y);
+    SMEAR.half.value.set((free * tile.scale) / 2, tile.scale / 2);
+  }
+  const k = 1 - Math.exp(-SMEAR_EASE * delta);
+  SMEAR.strength.value += (target - SMEAR.strength.value) * k;
+  if (SMEAR.strength.value < 0.01 && target === 0) SMEAR.strength.value = 0;
+  // Steps at an even rhythm: the strength fills a counter on each frame, and
+  // the smear steps each time the counter passes 1. Random steps came in
+  // bursts and pauses at low strength, which looked like a stutter.
+  smearCount += SMEAR.strength.value;
+  SMEAR.pulse.value = smearCount >= 1 ? 1 : 0;
+  if (smearCount >= 1) smearCount -= 1;
+  if (SMEAR.strength.value === 0) smearCount = 0;
+}
+
+// After a flight to a tile's view, the camera holds that view for a while.
+// Then it eases back to the start view's height (polar angle), distance, and
+// look-at point. The auto-rotation keeps turning it around the ship all the
+// time, so the turn angle is left alone.
+let flying = false;
+let holdUntil = 0;
+const settleOffset = new THREE.Vector3();
+const settleView = new THREE.Spherical();
+function settleCamera(delta) {
+  const k = 1 - Math.exp(-TUNE.camera.settle * delta);
+  settleOffset.copy(camera.position).sub(controls.target);
+  settleView.setFromVector3(settleOffset);
+  settleView.phi += (START_VIEW.phi - settleView.phi) * k;
+  settleView.radius += (START_VIEW.radius - settleView.radius) * k;
+  settleView.makeSafe();
+  controls.target.lerp(START_TARGET, k);
+  camera.position.setFromSpherical(settleView).add(controls.target);
+}
+
+// TUNING: frame statistics for the tuning panel. Every half second, the ship
+// sends the frame rate, the average and the slowest frame time, and the
+// number of slow frames (over 25 ms, so a dropped frame at 60 Hz) to the
+// framing page.
+const stats = { frames: 0, total: 0, worst: 0, slow: 0, since: performance.now() };
+function recordFrame(ms) {
+  stats.frames++;
+  stats.total += ms;
+  stats.worst = Math.max(stats.worst, ms);
+  if (ms > 25) stats.slow++;
+  const now = performance.now();
+  if (now - stats.since < 500) return;
+  if (window.parent !== window) {
+    window.parent.postMessage(
+      {
+        type: 'ship:stats',
+        fps: (stats.frames * 1000) / (now - stats.since),
+        avg: stats.total / stats.frames,
+        worst: stats.worst,
+        slow: stats.slow,
+      },
+      window.location.origin,
+    );
+  }
+  Object.assign(stats, { frames: 0, total: 0, worst: 0, slow: 0, since: now });
+}
+
 let lastTime = null;
 renderer.setAnimationLoop(() => {
   const time = performance.now() / 1000;
   const delta = lastTime === null ? 0 : time - lastTime;
+  if (lastTime !== null) recordFrame(delta * 1000);
 
   // A flight owns the camera while it runs; the orbit controls take over after.
-  if (!flight.update(delta)) controls.update();
+  // With the delta, the auto-rotation speed does not depend on the frame
+  // rate.
+  if (flight.update(delta)) {
+    flying = true;
+  } else {
+    if (flying) holdUntil = time + TUNE.camera.hold;
+    flying = false;
+    if (time >= holdUntil) settleCamera(delta);
+    controls.update(delta);
+  }
   clock.value = time;
+  updatePick(time);
+  updateSmear(time, delta);
   highlight.update(delta);
   drop.update(delta);
   lastTime = time;

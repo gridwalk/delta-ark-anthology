@@ -28,11 +28,14 @@ const FOOTPRINTS = [
 const CRAWL_MAX_AREA = 8; // footprint cells
 const CRAWL_MAX_HEIGHT = 3; // tiers
 
-const WINDOW_SIZES = [0.028, 0.044, 0.064];
+// Small windows, tightly packed. At the start view, one unit is about 40
+// pixels, so the smallest window is about one pixel. Smaller windows would
+// drop below a pixel and flicker.
+const WINDOW_SIZES = [0.022, 0.03, 0.04];
 const WINDOW_RELIEF = 0.01;
-const WINDOW_MARGIN = 0.034;
-const WINDOW_GAP = 0.026;
-const WINDOW_FILL = 0.74;
+const WINDOW_MARGIN = 0.024;
+const WINDOW_GAP = 0.014;
+const WINDOW_FILL = 0.8;
 
 // --- grid -----------------------------------------------------------------
 
@@ -259,12 +262,50 @@ function place(occ, skyline, inVoid, i, k, y, fw, fd, h) {
   return null;
 }
 
+// The shapes, with their odds. A kind that does not suit the module's size
+// is left out, and the kinds that fit share its odds. About two fifths of
+// the modules stay boxes, since only boxes get windows.
+//
+// - prism: an upright hexagon or octagon, on a square footprint.
+// - frustum: a box that narrows to the top.
+// - stepped: a stack of shrinking boxes, like a ziggurat.
+// - chamfer: a box with its vertical corners cut off.
+// - gabled: a box with a pitched roof.
+// - shed: a box with a roof that slopes to one side.
+// - lshape: a box with one corner taken out, an L seen from above.
+// - split: two boxes side by side, at two heights.
+// - ribbed: a box with a raised band at each tier.
+// - tank: an upright cylinder with a short tapered cap.
+const KINDS = [
+  ['prism', 0.06, (fw, fd) => fw === fd && fw >= 2],
+  ['frustum', 0.08, () => true],
+  ['stepped', 0.07, (fw, fd, h) => h >= 2],
+  ['chamfer', 0.07, (fw, fd) => fw >= 2 && fd >= 2],
+  ['gabled', 0.06, () => true],
+  ['shed', 0.05, () => true],
+  ['lshape', 0.06, (fw, fd) => fw >= 2 && fd >= 2],
+  ['split', 0.05, (fw, fd) => fw >= 2 || fd >= 2],
+  ['ribbed', 0.05, (fw, fd, h) => h >= 2],
+  ['tank', 0.05, (fw, fd) => Math.abs(fw - fd) <= 1],
+];
+
+// Kinds with a full, flat top, so a module above them looks carried.
+const FLAT_TOP = ['box', 'chamfer', 'ribbed'];
+
 function chooseKind(rand, fw, fd, h, support) {
-  if (support === 'bridge') return 'box'; // a tapered span reads as a mistake
-  const r = rand();
-  if (fw === fd && fw >= 2 && r < 0.1) return 'prism';
-  if (r < 0.22) return 'frustum';
-  if (r < 0.34 && h >= 2) return 'stepped';
+  // A bridge needs a flat underside and solid ends.
+  if (support === 'bridge') return rand() < 0.3 ? 'ribbed' : 'box';
+  // Only the kinds that fit share the odds. Their odds scale up, so a small
+  // module, which fits fewer kinds, is not more often a box.
+  const fitting = KINDS.filter(([, , fits]) => fits(fw, fd, h));
+  const total = KINDS.reduce((sum, [, odds]) => sum + odds, 0);
+  const fitTotal = fitting.reduce((sum, [, odds]) => sum + odds, 0);
+  let r = rand();
+  for (const [kind, odds] of fitting) {
+    const share = (odds * total) / fitTotal;
+    if (r < share) return kind;
+    r -= share;
+  }
   return 'box';
 }
 
@@ -287,25 +328,58 @@ function tryLandmark(rand, occ, owner, inVoid, modules, fw, fd, h, midships = fa
     }
   }
 
-  const index = modules.length;
-  for (let a = i; a < i + fw; a++) {
-    for (let b = k; b < k + fd; b++) {
-      for (let c = 0; c < h; c++) {
-        occ[at(a, b, c)] = 1;
-        owner[at(a, b, c)] = index;
+  // A landmark is never one monolithic block. It is a stack of two or three
+  // modules. Each tier above the first can step in by one cell on a side, so
+  // the stack narrows as it goes up, but every tier stands fully on the one
+  // below it. The lower tiers have flat tops. The top tier can have any
+  // shape.
+  const tiers = h >= 6 && rand() < 0.5 ? 3 : 2;
+  const heights = [];
+  let left = h;
+  for (let t = tiers; t > 1; t--) {
+    // Each tier gets at least two layers. The rest is shared at random.
+    const most = left - 2 * (t - 1);
+    const part = Math.max(2, Math.min(most, Math.round((left / t) * (0.7 + rand() * 0.6))));
+    heights.push(part);
+    left -= part;
+  }
+  heights.push(left);
+
+  let ti = i, tk = k, tw = fw, td = fd, y = 0;
+  heights.forEach((th, t) => {
+    if (t > 0) {
+      // Step in by one cell on each side, at random, if the tier stays at
+      // least three cells wide.
+      if (tw >= 5 && rand() < 0.6) { ti++; tw--; }
+      if (tw >= 4 && rand() < 0.6) { tw--; }
+      if (td >= 5 && rand() < 0.6) { tk++; td--; }
+      if (td >= 4 && rand() < 0.6) { td--; }
+    }
+    const index = modules.length;
+    for (let a = ti; a < ti + tw; a++) {
+      for (let b = tk; b < tk + td; b++) {
+        for (let c = y; c < y + th; c++) {
+          occ[at(a, b, c)] = 1;
+          owner[at(a, b, c)] = index;
+        }
       }
     }
-  }
 
-  // A prism needs a roughly square footprint or it inscribes to a stub.
-  const r = rand();
-  const kind =
-    Math.abs(fw - fd) <= 1 && r < 0.3 ? 'prism'
-    : r < 0.6 ? 'frustum'
-    : r < 0.8 ? 'stepped'
-    : 'box';
+    const top = t === heights.length - 1;
+    const r = rand();
+    const kind = !top
+      ? FLAT_TOP[Math.floor(r * FLAT_TOP.length)]
+      : Math.abs(tw - td) <= 1 && r < 0.2 ? 'prism'
+      : r < 0.35 ? 'frustum'
+      : r < 0.5 ? 'stepped'
+      : r < 0.62 ? 'gabled'
+      : r < 0.72 ? 'chamfer'
+      : r < 0.8 ? 'ribbed'
+      : 'box';
 
-  modules.push({ i, k, y: 0, fw, fd, h, kind, bridge: false, landmark: true });
+    modules.push({ i: ti, k: tk, y, fw: tw, fd: td, h: th, kind, bridge: false, landmark: true });
+    y += th;
+  });
   return true;
 }
 
@@ -504,9 +578,14 @@ function assignGroups(rand, modules, groups) {
 // --- drop fill ------------------------------------------------------------
 
 // On each hover, RISERS_MIN to RISERS_MAX modules of the lit group also grow a
-// tower of RISE_MIN to RISE_MAX copies upward.
+// tower of RISE_MIN to RISE_MAX copies upward. The copies near the top of a
+// tower are smaller (see SMALL_MIN and SMALL_MAX).
 const RISE_MIN = 5;
 const RISE_MAX = 10;
+// The size of the small copies near the top of a tower, as a share of the
+// module. Each tower picks one size in this range.
+const SMALL_MIN = 0.5;
+const SMALL_MAX = 0.7;
 const RISERS_MIN = 1;
 const RISERS_MAX = 3;
 
@@ -632,8 +711,12 @@ export function buildDrop(cargo, group, kept = null, rand = Math.random) {
   const indices = [];
 
   // One copy of module n with its base on layer `bottom`, `layers` tall.
-  const pushCopy = (n, bottom, layers, distance) => {
+  // `scale` shrinks the copy's width and depth around the module's centre.
+  // Pass layers = m.h x scale too, so the copy keeps its proportions.
+  const pushCopy = (n, bottom, layers, distance, scale = 1) => {
     const m = modules[n];
+    const cx = cellX(m.i) + (m.fw * CELL) / 2;
+    const cz = cellZ(m.k) + (m.fd * CELL) / 2;
     const { start, count, indexStart, indexCount } = moduleRanges[n];
     const baseY = DEPTH + m.y * LAYER_H;
     const squash = layers / m.h;
@@ -642,9 +725,9 @@ export function buildDrop(cargo, group, kept = null, rand = Math.random) {
 
     for (let v = start; v < start + count; v++) {
       positions.push(
-        basePositions[v * 3],
+        cx + (basePositions[v * 3] - cx) * scale,
         y0 + (basePositions[v * 3 + 1] - baseY) * squash,
-        basePositions[v * 3 + 2],
+        cz + (basePositions[v * 3 + 2] - cz) * scale,
       );
       normals.push(baseNormals[v * 3], baseNormals[v * 3 + 1], baseNormals[v * 3 + 2]);
       reach.push(distance);
@@ -685,8 +768,21 @@ export function buildDrop(cargo, group, kept = null, rand = Math.random) {
     const m = modules[n];
     const wanted = RISE_MIN + Math.floor(rand() * (RISE_MAX - RISE_MIN + 1));
     const copies = Math.min(room, wanted);
-    for (let k = 1; k <= copies; k++) pushCopy(n, m.y + m.h * k, m.h, m.h * k);
-    fill(m, m.y + m.h, m.y + m.h * (copies + 1));
+    // Two sizes: full size at the bottom, then smaller copies to the top.
+    // The first small copy is anywhere from about the middle of the tower to
+    // the last copy, so at least the top copy is small. A small copy shrinks
+    // in all three directions, so it keeps the module's shape.
+    const middle = Math.max(1, Math.ceil(copies / 2));
+    const firstSmall = copies - Math.floor(rand() * (copies - middle + 1));
+    const small = SMALL_MIN + rand() * (SMALL_MAX - SMALL_MIN);
+    let bottom = m.y + m.h;
+    for (let k = 1; k <= copies; k++) {
+      const scale = k >= firstSmall ? small : 1;
+      const layers = m.h * scale;
+      pushCopy(n, bottom, layers, bottom - m.y, scale);
+      bottom += layers;
+    }
+    fill(m, m.y + m.h, Math.ceil(bottom));
     raised++;
   }
 
@@ -806,6 +902,191 @@ function pushStepped(target, c, s, rand) {
   }
 }
 
+// A convex solid from its faces, in any order and any winding. Each face is
+// turned to face away from the solid's centre, so the new shapes below need
+// no care about vertex order.
+function pushConvex(target, faces) {
+  const centre = [0, 0, 0];
+  let count = 0;
+  for (const face of faces) {
+    for (const v of face) {
+      centre[0] += v[0]; centre[1] += v[1]; centre[2] += v[2];
+      count++;
+    }
+  }
+  centre[0] /= count; centre[1] /= count; centre[2] /= count;
+
+  for (const face of faces) {
+    const [a, b, c] = face;
+    const n = [
+      (b[1] - a[1]) * (c[2] - a[2]) - (b[2] - a[2]) * (c[1] - a[1]),
+      (b[2] - a[2]) * (c[0] - a[0]) - (b[0] - a[0]) * (c[2] - a[2]),
+      (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]),
+    ];
+    const mid = [0, 0, 0];
+    for (const v of face) { mid[0] += v[0]; mid[1] += v[1]; mid[2] += v[2]; }
+    const out =
+      n[0] * (mid[0] / face.length - centre[0]) +
+      n[1] * (mid[1] / face.length - centre[1]) +
+      n[2] * (mid[2] / face.length - centre[2]);
+    pushFace(target, out < 0 ? face.slice().reverse() : face);
+  }
+}
+
+// The faces of a solid between two rings with the same vertex count: both
+// caps and the sides.
+function ringFaces(bottom, top) {
+  const faces = [bottom, top];
+  for (let n = 0; n < bottom.length; n++) {
+    const m = (n + 1) % bottom.length;
+    faces.push([bottom[n], bottom[m], top[m], top[n]]);
+  }
+  return faces;
+}
+
+// A box from its min and max corners.
+function pushBlock(target, min, max) {
+  pushConvex(
+    target,
+    ringFaces(
+      ring((min[0] + max[0]) / 2, (min[2] + max[2]) / 2, (max[0] - min[0]) / 2, (max[2] - min[2]) / 2, min[1]),
+      ring((min[0] + max[0]) / 2, (min[2] + max[2]) / 2, (max[0] - min[0]) / 2, (max[2] - min[2]) / 2, max[1]),
+    ),
+  );
+}
+
+// An octagon in plan: the box with its vertical corners cut. `cut` is the
+// share of the shorter side that each corner loses.
+function pushChamfer(target, c, s, cut) {
+  const hx = s[0] / 2;
+  const hz = s[2] / 2;
+  const d = Math.min(s[0], s[2]) * cut;
+  const plan = [
+    [-hx + d, -hz], [hx - d, -hz], [hx, -hz + d], [hx, hz - d],
+    [hx - d, hz], [-hx + d, hz], [-hx, hz - d], [-hx, -hz + d],
+  ];
+  const y0 = c[1] - s[1] / 2;
+  const y1 = c[1] + s[1] / 2;
+  pushConvex(
+    target,
+    ringFaces(
+      plan.map(([x, z]) => [c[0] + x, y0, c[2] + z]),
+      plan.map(([x, z]) => [c[0] + x, y1, c[2] + z]),
+    ),
+  );
+}
+
+// Walls up to `wallShare` of the height, then a pitched roof to a ridge
+// along `axis` (0 for x, 2 for z).
+function pushGabled(target, c, s, axis, wallShare) {
+  const y0 = c[1] - s[1] / 2;
+  const y1 = c[1] + s[1] / 2;
+  const yw = y0 + s[1] * wallShare;
+  const hx = s[0] / 2;
+  const hz = s[2] / 2;
+  pushBlock(target, [c[0] - hx, y0, c[2] - hz], [c[0] + hx, yw, c[2] + hz]);
+
+  // The roof is a triangular prism: one triangle at each end of the ridge.
+  const end = (t) =>
+    axis === 0
+      ? [[c[0] + t, yw, c[2] - hz], [c[0] + t, yw, c[2] + hz], [c[0] + t, y1, c[2]]]
+      : [[c[0] - hx, yw, c[2] + t], [c[0] + hx, yw, c[2] + t], [c[0], y1, c[2] + t]];
+  const half = axis === 0 ? hx : hz;
+  pushConvex(target, ringFaces(end(-half), end(half)));
+}
+
+// A roof that slopes down along `axis`, toward the + side if `towardPlus`.
+// The low side is `lowShare` of the full height.
+function pushShed(target, c, s, axis, towardPlus, lowShare) {
+  const y0 = c[1] - s[1] / 2;
+  const y1 = c[1] + s[1] / 2;
+  const yLow = y0 + s[1] * lowShare;
+  const hx = s[0] / 2;
+  const hz = s[2] / 2;
+  const bottom = ring(c[0], c[2], hx, hz, y0);
+  const top = ring(c[0], c[2], hx, hz, y1).map((v) => {
+    const offset = axis === 0 ? v[0] - c[0] : v[2] - c[2];
+    const low = towardPlus ? offset > 0 : offset < 0;
+    return low ? [v[0], yLow, v[2]] : v;
+  });
+  pushConvex(target, ringFaces(bottom, top));
+}
+
+// An L in plan: two boxes, with the corner `corner` (0 to 3) taken out.
+// `share` is the width of each arm, as a share of the side.
+function pushLShape(target, c, s, corner, share) {
+  const y0 = c[1] - s[1] / 2;
+  const y1 = c[1] + s[1] / 2;
+  const x0 = c[0] - s[0] / 2;
+  const x1 = c[0] + s[0] / 2;
+  const z0 = c[2] - s[2] / 2;
+  const z1 = c[2] + s[2] / 2;
+  const sx = corner & 1 ? 1 : -1; // the side of the full-depth arm
+  const sz = corner & 2 ? 1 : -1; // the side of the full-width arm
+  const xArm = sx < 0 ? [x0, x0 + s[0] * share] : [x1 - s[0] * share, x1];
+  const zArm = sz < 0 ? [z0, z0 + s[2] * share] : [z1 - s[2] * share, z1];
+  // The full-depth arm, then the rest of the full-width arm beside it.
+  pushBlock(target, [xArm[0], y0, z0], [xArm[1], y1, z1]);
+  const rest = sx < 0 ? [xArm[1], x1] : [x0, xArm[0]];
+  pushBlock(target, [rest[0], y0, zArm[0]], [rest[1], y1, zArm[1]]);
+}
+
+// Two boxes side by side along `axis`. The first takes `share` of the side
+// at full height. The second is `lowShare` of the height.
+function pushSplit(target, c, s, axis, share, lowShare) {
+  const y0 = c[1] - s[1] / 2;
+  const y1 = c[1] + s[1] / 2;
+  const min = [c[0] - s[0] / 2, y0, c[2] - s[2] / 2];
+  const max = [c[0] + s[0] / 2, y1, c[2] + s[2] / 2];
+  const cut = min[axis] + s[axis] * share;
+  const firstMax = max.slice();
+  firstMax[axis] = cut;
+  pushBlock(target, min, firstMax);
+  const secondMin = min.slice();
+  secondMin[axis] = cut;
+  const secondMax = max.slice();
+  secondMax[1] = y0 + s[1] * lowShare;
+  pushBlock(target, secondMin, secondMax);
+}
+
+// A core box with a raised band at each tier boundary, so the stack of tiers
+// shows on the outside.
+function pushRibbed(target, c, s, tiers) {
+  const y0 = c[1] - s[1] / 2;
+  const y1 = c[1] + s[1] / 2;
+  const inset = Math.min(s[0], s[2]) * 0.05;
+  const band = Math.min(0.03, s[1] / (tiers * 4));
+  pushBlock(
+    target,
+    [c[0] - s[0] / 2 + inset, y0, c[2] - s[2] / 2 + inset],
+    [c[0] + s[0] / 2 - inset, y1, c[2] + s[2] / 2 - inset],
+  );
+  for (let t = 1; t < tiers; t++) {
+    const y = y0 + (s[1] * t) / tiers;
+    pushBlock(target, [c[0] - s[0] / 2, y - band / 2, c[2] - s[2] / 2], [c[0] + s[0] / 2, y + band / 2, c[2] + s[2] / 2]);
+  }
+  // A band at the top edge too, so the roof reads as a parapet.
+  pushBlock(target, [c[0] - s[0] / 2, y1 - band, c[2] - s[2] / 2], [c[0] + s[0] / 2, y1, c[2] + s[2] / 2]);
+}
+
+// An upright cylinder with `sides` sides, and a short tapered cap on top.
+function pushTank(target, c, s, sides) {
+  const r = Math.min(s[0], s[2]) / 2;
+  const y0 = c[1] - s[1] / 2;
+  const y1 = c[1] + s[1] / 2;
+  const yCap = y1 - Math.min(s[1] * 0.2, r * 0.6);
+  const circle = (radius, y) => {
+    const points = [];
+    for (let n = 0; n < sides; n++) {
+      const a = (2 * Math.PI * n) / sides;
+      points.push([c[0] + radius * Math.cos(a), y, c[2] + radius * Math.sin(a)]);
+    }
+    return points;
+  };
+  pushConvex(target, ringFaces(circle(r, y0), circle(r, yCap)));
+  pushConvex(target, ringFaces(circle(r, yCap), circle(r * 0.55, y1)));
+}
+
 // Windows are studs standing a hair off the face rather than holes cut into
 // it. With an outline renderer the two read the same -- you only see the
 // stroke at the border -- and this needs no re-tessellation. The relief is far
@@ -898,6 +1179,21 @@ export function createCargo(material, seed = defaultSeed(), groups = defaultGrou
       pushFrustum(target, c, s, 0.35 + rand() * 0.45);
     } else if (m.kind === 'stepped') {
       pushStepped(target, c, s, rand);
+    } else if (m.kind === 'chamfer') {
+      pushChamfer(target, c, s, 0.18 + rand() * 0.14);
+    } else if (m.kind === 'gabled') {
+      // The ridge runs along the longer side.
+      pushGabled(target, c, s, s[0] >= s[2] ? 0 : 2, 0.55 + rand() * 0.2);
+    } else if (m.kind === 'shed') {
+      pushShed(target, c, s, rand() < 0.5 ? 0 : 2, rand() < 0.5, 0.45 + rand() * 0.3);
+    } else if (m.kind === 'lshape') {
+      pushLShape(target, c, s, Math.floor(rand() * 4), 0.4 + rand() * 0.2);
+    } else if (m.kind === 'split') {
+      pushSplit(target, c, s, s[0] >= s[2] ? 0 : 2, 0.4 + rand() * 0.2, 0.5 + rand() * 0.3);
+    } else if (m.kind === 'ribbed') {
+      pushRibbed(target, c, s, m.h);
+    } else if (m.kind === 'tank') {
+      pushTank(target, c, s, 12 + 2 * Math.floor(rand() * 3));
     } else {
       pushBox(target, c, s);
     }
@@ -957,6 +1253,14 @@ export function createCargo(material, seed = defaultSeed(), groups = defaultGrou
   // and its vertices as built. The live position buffer is no use for that,
   // since the fill and crawl effects collapse modules in it.
   mesh.userData.modules = modules;
+  // Each module's grid box in the cargo's local space, as min x, y, z then
+  // max x, y, z. The pointer pick tests these, not the full geometry.
+  mesh.userData.boxes = Float32Array.from(
+    modules.flatMap((m) => [
+      cellX(m.i), DEPTH + m.y * LAYER_H, cellZ(m.k),
+      cellX(m.i + m.fw), DEPTH + (m.y + m.h) * LAYER_H, cellZ(m.k + m.fd),
+    ]),
+  );
   mesh.userData.moduleGroup = moduleGroup;
   mesh.userData.basePositions = Float32Array.from(target.positions);
   mesh.userData.landmarkCount = landmarks.count;

@@ -20,6 +20,7 @@
   // inner rectangles, in viewport pixels, which match its own because the
   // iframe fills the viewport.
   var panels = document.querySelectorAll('.ship-panel');
+  var links = document.querySelectorAll('.toc-link[data-index]');
   var shipReady = false;
 
   function sendPanels() {
@@ -36,9 +37,26 @@
     post({ type: 'ship:panels', rects: rects });
   }
 
+  // EXPERIMENT: two-way navigation. A container under the pointer on the
+  // ship lights its group there, and the ship sends { type: 'ship:hover',
+  // group }. The matching name gets the hover look, from the class below.
+  function markShipHover(group) {
+    links.forEach(function (link) {
+      link.classList.toggle('is-ship-hover', Number(link.dataset.index) === group);
+    });
+  }
+
   window.addEventListener('message', function (event) {
     if (event.origin !== window.location.origin) return;
     if (event.source !== frame.contentWindow) return;
+    if (event.data && event.data.type === 'ship:hover') {
+      var group = event.data.group;
+      markShipHover(Number.isInteger(group) ? group : null);
+      // The pointer left the ship. Clear the light unless the pointer is now
+      // on a name, which has lit its own group.
+      if (event.data.left && !document.querySelector('.toc-link:hover')) send(null);
+      return;
+    }
     if (event.data && event.data.type === 'ship:ready') {
       shipReady = true;
       sendPanels();
@@ -75,7 +93,6 @@
     }
   }
 
-  var links = document.querySelectorAll('.toc-link[data-index]');
   links.forEach(function (link) {
     var group = Number(link.dataset.index);
     link.addEventListener('mouseenter', function () { send(group); });

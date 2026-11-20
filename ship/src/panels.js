@@ -176,6 +176,19 @@ export function createPanels({ buildPipeline, pixelRatio, bounds }) {
       );
     },
 
+    /**
+     * The hovered tile, or null. `index` is its place in VIEWS. `centre` is its rectangle's eased offset from
+     * the tile's centre, in shares of the tile. `limit` is the largest offset
+     * on each axis, and `scale` is the rectangle's size as a share of the
+     * tile.
+     */
+    hovered() {
+      const index = panels.findIndex((p) => p.hover.value > 0.5);
+      if (index < 0) return null;
+      const panel = panels[index];
+      return { index, centre: panel.centre.value, limit: FOLLOW_LIMIT, scale: BACKDROP_SCALE };
+    },
+
     /** Eases each rectangle toward its target. */
     update(delta) {
       const k = 1 - Math.exp(-FOLLOW_RATE * delta);

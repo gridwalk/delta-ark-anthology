@@ -5,7 +5,11 @@
 // Open the homepage with ?tune=1 to show the panel. The ship sends its current
 // values with 'ship:ready'. Each slider sends all values back with
 // 'ship:tune'. The panel keeps your values in this browser, so a reload keeps
-// them. "Copy values" copies them as JSON to paste into a chat.
+// them. "Copy values" copies them as JSON to paste into a chat. The panel
+// does not show the JSON.
+//
+// The panel sits in the space below the listing. If it is taller than that
+// space, it scrolls.
 (function () {
   if (new URLSearchParams(window.location.search).get('tune') !== '1') return;
   var frame = document.querySelector('.ship-backdrop');
@@ -26,6 +30,13 @@
     ['cargo', 'overlap', 'Copy overlap (0 wait, 1 at once)', 0, 1, 0.05],
     ['tiles', 'fogPush', 'Tile fog push (ship lengths)', -2, 4, 0.05],
     ['tiles', 'lineWeight', 'Tile line weight (x main)', 1, 6, 0.25],
+    ['smear', 'step', 'Smear step (px)', 1, 12, 1],
+    ['smear', 'rects', 'Smear rectangles', 1, 16, 1],
+    ['smear', 'size', 'Smear rect size (share)', 0.1, 1, 0.05],
+    ['smear', 'clearBlack', 'Black is transparent (0 off, 1 on)', 0, 1, 1],
+    ['camera', 'spin', 'Rotation speed (2 = 30 s/turn)', -4, 4, 0.05],
+    ['camera', 'hold', 'Hold after a tile click (s)', 0, 20, 0.5],
+    ['camera', 'settle', 'Return speed (per s)', 0.02, 2, 0.01],
   ];
 
   var defaults = null; // from the ship
@@ -58,6 +69,31 @@
     return JSON.stringify(values, null, 2);
   }
 
+  // The clipboard API needs a secure context. localhost counts, but a LAN
+  // address does not, so fall back to a hidden text area and execCommand.
+  function copyText(value) {
+    if (navigator.clipboard && window.isSecureContext) {
+      return navigator.clipboard.writeText(value);
+    }
+    return new Promise(function (resolve, reject) {
+      var area = document.createElement('textarea');
+      area.value = value;
+      area.style.position = 'fixed';
+      area.style.opacity = '0';
+      document.body.appendChild(area);
+      area.select();
+      var ok = false;
+      try {
+        ok = document.execCommand('copy');
+      } catch (e) {
+        ok = false;
+      }
+      area.remove();
+      if (ok) resolve();
+      else reject();
+    });
+  }
+
   // ── Panel ────────────────────────────────────────────────────────────────
 
   var style = document.createElement('style');
@@ -72,8 +108,9 @@
     '.ship-tune .row { display: flex; justify-content: space-between; }',
     '.ship-tune .val { color: #f15a30; font-variant-numeric: tabular-nums; }',
     '.ship-tune input[type=range] { width: 100%; margin: 2px 0 0; accent-color: #f15a30; }',
-    '.ship-tune pre { margin: 10px 0 8px; padding: 6px; background: #000; white-space: pre; overflow: auto; font: inherit; user-select: all; }',
-    '.ship-tune .buttons { display: flex; gap: 8px; }',
+    '.ship-tune { overflow-y: auto; overscroll-behavior: contain; box-sizing: border-box; }',
+    '.ship-tune .stats { margin: 0 0 6px; color: #00b49b; font-variant-numeric: tabular-nums; white-space: pre; }',
+    '.ship-tune .buttons { display: flex; gap: 8px; margin-top: 10px; }',
     '.ship-tune button { flex: 1; padding: 4px; font: inherit; color: #fff; background: none; border: 1px solid #fff; cursor: pointer; }',
     '.ship-tune button:hover { color: #f15a30; border-color: #f15a30; }',
   ].join('\n');
@@ -84,12 +121,29 @@
   panel.innerHTML = '<h2>Ship tuning</h2><p class="wait">Waiting for the ship…</p>';
   document.body.appendChild(panel);
 
+  // The panel's height is limited to the space between the bottom of the
+  // listing and the bottom of the window, with 16px gaps. When the listing
+  // fills the window, the panel keeps a minimum height and covers it.
+  var GAP = 16;
+  var MIN_HEIGHT = 160;
+  var nav = document.querySelector('.toc-list');
+  function fit() {
+    var top = nav ? nav.getBoundingClientRect().bottom : 0;
+    var space = window.innerHeight - Math.max(top, 0) - GAP * 2;
+    panel.style.maxHeight = Math.max(space, MIN_HEIGHT) + 'px';
+  }
+  fit();
+  window.addEventListener('resize', fit);
+  window.addEventListener('scroll', fit, { passive: true });
+  if (window.ResizeObserver && nav) new ResizeObserver(fit).observe(nav);
+
   function format(value, step) {
     return step >= 1 ? String(value) : value.toFixed(2);
   }
 
   function build() {
     panel.innerHTML = '<h2>Ship tuning</h2>';
+    panel.appendChild(statsLine);
     var group = null;
     CONTROLS.forEach(function (c) {
       if (c[0] !== group) {
@@ -107,7 +161,6 @@
       input.addEventListener('input', function () {
         values[c[0]][c[1]] = Number(input.value);
         out.textContent = format(values[c[0]][c[1]], c[5]);
-        pre.textContent = text();
         save();
         send();
       });
@@ -115,18 +168,15 @@
       panel.appendChild(label);
     });
 
-    var pre = document.createElement('pre');
-    panel.appendChild(pre);
-
     var buttons = document.createElement('div');
     buttons.className = 'buttons';
     var copy = document.createElement('button');
     copy.type = 'button';
     copy.textContent = 'Copy values';
     copy.addEventListener('click', function () {
-      navigator.clipboard.writeText(text()).then(
+      copyText(text()).then(
         function () { copy.textContent = 'Copied'; },
-        function () { copy.textContent = 'Select the text above'; }
+        function () { copy.textContent = 'Copy failed'; }
       );
       setTimeout(function () { copy.textContent = 'Copy values'; }, 1500);
     });
@@ -149,10 +199,23 @@
         entry.input.value = values[c[0]][c[1]];
         entry.out.textContent = format(values[c[0]][c[1]], entry.step);
       });
-      pre.textContent = text();
     }
     sync();
   }
+
+  // Frame statistics from the ship (see recordFrame in ship/src/main.js).
+  var statsLine = document.createElement('p');
+  statsLine.className = 'stats';
+  statsLine.textContent = 'Waiting for frame stats…';
+  window.addEventListener('message', function (event) {
+    if (event.origin !== window.location.origin) return;
+    if (event.source !== frame.contentWindow) return;
+    var d = event.data;
+    if (!d || d.type !== 'ship:stats') return;
+    statsLine.textContent =
+      d.fps.toFixed(0) + ' fps   avg ' + d.avg.toFixed(1) + ' ms\n' +
+      'slowest ' + d.worst.toFixed(1) + ' ms   slow frames ' + d.slow;
+  });
 
   window.addEventListener('message', function (event) {
     if (event.origin !== window.location.origin) return;

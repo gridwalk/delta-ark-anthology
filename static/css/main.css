@@ -501,16 +501,33 @@ code, pre, kbd, samp {
   align-self: center;
 }
 
-.toc-link:hover {
+/* On the homepage, the ship and its pixel smear run behind the listing. A
+   dark ground behind the name and the title keeps their letters readable
+   over a bright smear. It covers only the text, not the leader, so the ship
+   still shows between the name and the title. */
+.toc-ship .toc-name,
+.toc-ship .toc-work {
+  background: rgba(17, 19, 20, 0.8);
+}
+
+.toc-link:hover,
+.toc-link.is-ship-hover {
   background: var(--white);
 }
 
+/* The hover row is white, so the dark text ground goes away on hover.
+   .is-ship-hover is the same look, for a name whose containers are under the
+   pointer on the ship (see ship-highlight.js). */
 .toc-link:hover .toc-name,
-.toc-link:hover .toc-work {
+.toc-link:hover .toc-work,
+.toc-link.is-ship-hover .toc-name,
+.toc-link.is-ship-hover .toc-work {
   color: var(--black);
+  background: transparent;
 }
 
-.toc-link:hover .toc-leader {
+.toc-link:hover .toc-leader,
+.toc-link.is-ship-hover .toc-leader {
   border-bottom-color: var(--black);
 }
 
