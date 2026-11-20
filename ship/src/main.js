@@ -10,7 +10,7 @@ import { createModuleView } from './modules.js';
 import { createHighlight } from './highlight.js';
 import { createDrop } from './drop.js';
 import { clock, isShown, transition } from './visibility.js';
-import { chooseKept } from './cargo.js';
+import { GROUPING, chooseKept } from './cargo.js';
 import { createPanels, fitView, VIEWS } from './panels.js';
 import { createFlight } from './flight.js';
 import { createDitherParams, dither } from './dither.js';
@@ -378,6 +378,13 @@ function setGroup(group) {
   const next = Number.isInteger(group) && group >= 0 && group < cargo.userData.groupCount ? group : null;
   highlight.set(next);
 
+  // With chunk groups, a hover only lights the chunk's edges. Nothing hides,
+  // builds, or drops.
+  if (GROUPING === 'chunks') {
+    litGroup = next;
+    return;
+  }
+
   // The drop fill restarts only when the lit group changes, so a repeated
   // message for the same group does not replay it.
   if (next === litGroup) return;
@@ -413,8 +420,10 @@ window.addEventListener('message', onMessage);
 // pass through to a container of another group. Thus a change waits a short
 // time: PICK_SWITCH to go to another group, PICK_CLEAR to go to none. A
 // short pass over a gap does not flicker the light.
-const PICK_SWITCH = 0.25; // seconds
-const PICK_CLEAR = 0.35; // seconds
+// With chunk groups nothing hides, so the ray cannot jump, and the waits are
+// short.
+const PICK_SWITCH = GROUPING === 'chunks' ? 0.05 : 0.25; // seconds
+const PICK_CLEAR = GROUPING === 'chunks' ? 0.1 : 0.35; // seconds
 const pointer = { x: 0, y: 0, inside: false };
 const pickRay = new THREE.Ray();
 const pickInverse = new THREE.Matrix4();

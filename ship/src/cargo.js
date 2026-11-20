@@ -76,6 +76,16 @@ function defaultGroups() {
   return 0;
 }
 
+// EXPERIMENT: how the modules are shared out to the listing's groups, from
+// ?grouping=. 'chunks' (the default) gives each group one contiguous chunk of
+// the layout (see assignChunks). 'scatter' spreads each group over the whole
+// deck (see assignGroups), for the hide and build hover.
+export const GROUPING =
+  typeof location !== 'undefined' &&
+  new URLSearchParams(location.search).get('grouping') === 'scatter'
+    ? 'scatter'
+    : 'chunks';
+
 // A cell is usable only if it clears the deck edge at both ends of its span --
 // the deck narrows toward the bow, so testing the centre would overhang.
 function cellOnDeck(i, k) {
@@ -524,6 +534,144 @@ function buildAdjacency(modules, owner) {
 //
 // Takes its own random stream so allocating groups never changes the layout a
 // given ?seed= produces.
+// The outer surface of module m that nothing covers: its top, and each side
+// face, cell by cell, where the next cell is empty. The bottom does not
+// count. In square units.
+function exposure(occ, m) {
+  const free = (a, b, c) =>
+    a < 0 || a >= NX || b < 0 || b >= NZ || c >= GRID_LAYERS || !occ[at(a, b, c)];
+  const top = m.y + m.h;
+  let area = 0;
+  for (let a = m.i; a < m.i + m.fw; a++) {
+    for (let b = m.k; b < m.k + m.fd; b++) if (free(a, b, top)) area += CELL * CELL;
+  }
+  for (let c = m.y; c < top; c++) {
+    for (let b = m.k; b < m.k + m.fd; b++) {
+      if (free(m.i - 1, b, c)) area += CELL * LAYER_H;
+      if (free(m.i + m.fw, b, c)) area += CELL * LAYER_H;
+    }
+    for (let a = m.i; a < m.i + m.fw; a++) {
+      if (free(a, m.k - 1, c)) area += CELL * LAYER_H;
+      if (free(a, m.k + m.fd, c)) area += CELL * LAYER_H;
+    }
+  }
+  return area;
+}
+
+// One contiguous chunk of the layout for each group, with about the same
+// exposed surface in each (see exposure).
+//
+// A recursive cut: the modules are sorted along the longer side of their
+// area in plan, and cut where the exposure on each side is in proportion to
+// the groups that side gets. Then each side is cut again, until each part
+// has one group. A cut goes through the whole height, so a chunk is a block
+// of whole stacks, except where a cut falls inside one stack. The groups
+// come out in order along the ship, so the listing order follows the hull.
+//
+// A cut leaves at least one module for each group on each side, so a large
+// landmark tier with a lot of exposure cannot leave a group empty. After the
+// cuts, gaps in the layout can leave a chunk in more than one piece. Each
+// piece apart from the largest then joins the chunk that it touches most
+// (see joinStrays).
+function assignChunks(modules, occ, groups, adjacency) {
+  const group = new Int32Array(modules.length).fill(-1);
+  if (!groups) return group;
+
+  const items = modules.map((m, n) => ({
+    n,
+    x: m.i + m.fw / 2,
+    z: m.k + m.fd / 2,
+    y: m.y,
+    w: exposure(occ, m),
+  }));
+
+  const split = (list, first, count) => {
+    if (count <= 1 || list.length <= 1) {
+      for (const item of list) group[item.n] = first;
+      return;
+    }
+    let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+    for (const { x, z } of list) {
+      minX = Math.min(minX, x); maxX = Math.max(maxX, x);
+      minZ = Math.min(minZ, z); maxZ = Math.max(maxZ, z);
+    }
+    const [a, b] = maxX - minX >= maxZ - minZ ? ['x', 'z'] : ['z', 'x'];
+    list.sort((p, q) => p[a] - q[a] || p[b] - q[b] || p.y - q.y);
+
+    const firstCount = Math.floor(count / 2);
+    const total = list.reduce((sum, item) => sum + item.w, 0);
+    const wanted = (total * firstCount) / count;
+    // Each side keeps at least one module for each of its groups.
+    const lowest = Math.max(1, firstCount);
+    const highest = Math.min(list.length - 1, list.length - (count - firstCount));
+    let cut = 1;
+    let sum = list[0].w;
+    while (cut < list.length - 1 && sum + list[cut].w / 2 < wanted) {
+      sum += list[cut].w;
+      cut++;
+    }
+    cut = Math.max(lowest, Math.min(highest, cut));
+    split(list.slice(0, cut), first, firstCount);
+    split(list.slice(cut), first + firstCount, count - firstCount);
+  };
+
+  split(items, 0, groups);
+  joinStrays(group, groups, adjacency, items);
+  return group;
+}
+
+// Joins each stray piece of a chunk to the neighbouring chunk that it touches
+// most. A piece is a set of modules of one group that touch each other. The
+// largest piece of each group, by exposure, stays. A stray piece with no
+// neighbour in another group stays too.
+function joinStrays(group, groups, adjacency, items) {
+  const weight = new Float64Array(group.length);
+  for (const { n, w } of items) weight[n] = w;
+
+  for (let g = 0; g < groups; g++) {
+    const members = [];
+    for (let n = 0; n < group.length; n++) if (group[n] === g) members.push(n);
+
+    const pieces = [];
+    const seen = new Set();
+    for (const start of members) {
+      if (seen.has(start)) continue;
+      const piece = [start];
+      seen.add(start);
+      for (let p = 0; p < piece.length; p++) {
+        for (const o of adjacency[piece[p]]) {
+          if (group[o] === g && !seen.has(o)) {
+            seen.add(o);
+            piece.push(o);
+          }
+        }
+      }
+      pieces.push(piece);
+    }
+    if (pieces.length < 2) continue;
+
+    const size = (piece) => piece.reduce((sum, n) => sum + weight[n], 0);
+    pieces.sort((p, q) => size(q) - size(p));
+    for (const piece of pieces.slice(1)) {
+      const votes = new Map();
+      for (const n of piece) {
+        for (const o of adjacency[n]) {
+          if (group[o] !== g) votes.set(group[o], (votes.get(group[o]) ?? 0) + 1);
+        }
+      }
+      let best = null;
+      let most = 0;
+      for (const [other, count] of votes) {
+        if (count > most) {
+          best = other;
+          most = count;
+        }
+      }
+      if (best !== null) for (const n of piece) group[n] = best;
+    }
+  }
+}
+
 function assignGroups(rand, modules, groups) {
   const group = new Int32Array(modules.length).fill(-1);
   if (!groups) return group;
@@ -1149,7 +1297,11 @@ function faceExposed(occ, m, axis, sign) {
 export function createCargo(material, seed = defaultSeed(), groups = defaultGroups()) {
   const rand = mulberry32(seed);
   const { occ, owner, modules, landmarks } = pack(rand);
-  const moduleGroup = assignGroups(mulberry32(seed ^ 0x9e3779b9), modules, groups);
+  const adjacency = buildAdjacency(modules, owner);
+  const moduleGroup =
+    GROUPING === 'chunks'
+      ? assignChunks(modules, occ, groups, adjacency)
+      : assignGroups(mulberry32(seed ^ 0x9e3779b9), modules, groups);
 
   const target = { positions: [], normals: [], indices: [] };
   const g = MODULE_GAP / 2;
@@ -1244,7 +1396,7 @@ export function createCargo(material, seed = defaultSeed(), groups = defaultGrou
   mesh.userData.bridgeCount = modules.filter((m) => m.bridge).length;
   mesh.userData.moduleRanges = ranges;
   mesh.userData.moduleBaseY = Float32Array.from(baseHeights);
-  mesh.userData.adjacency = buildAdjacency(modules, owner);
+  mesh.userData.adjacency = adjacency;
   mesh.userData.crawlable = Uint8Array.from(modules, (m) =>
     !m.landmark && m.fw * m.fd <= CRAWL_MAX_AREA && m.h <= CRAWL_MAX_HEIGHT ? 1 : 0,
   );
