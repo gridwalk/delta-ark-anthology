@@ -438,7 +438,8 @@ code, pre, kbd, samp {
 .ship-panel {
   flex: 1 1 0;
   min-height: 0;
-  border: 1px solid var(--sea-green);
+  /* Dotted, to match the dither on the ship. */
+  border: 1px dotted var(--sea-green);
   pointer-events: auto;
   cursor: pointer;
 }
