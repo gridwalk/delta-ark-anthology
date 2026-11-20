@@ -6,9 +6,7 @@ dist/
 # Meeting transcripts (named participants) and moodboard reference images.
 context/
 
-# Raw form export: contains unlisted Drive/Dropbox links granting access to
-# contributors' full-resolution stills and master video files.
-docs/artist-form-responses-*.csv
-
-# Private spreadsheet URL for the submissions sheet.
-docs/content-submissions-link.md
+# Project documents stay out of the public repo: task files, plans, notes,
+# the changelog, the form exports (with unlisted Drive and Dropbox links to
+# the contributors' masters), and the submissions sheet link.
+docs/
