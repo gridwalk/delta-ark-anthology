@@ -118,6 +118,63 @@ function buildTransom() {
   return toGeometry(pos, idx);
 }
 
+// A thick triangle outline under the keel, seen only from below. It is a flat
+// band: an outer triangle with an inner triangle cut out. The keel is flat
+// from about 10% to 85% of the length, and nearly flat across the middle of
+// the beam, so the band lies just under it.
+//
+// Its material writes 1 to the scene pass's blue channel and nothing else, and
+// the compositor fills that mask in the line colour (see compose in
+// outline.js). Thus the band shows as a solid white stroke, not as an outline
+// of a band.
+// An equilateral triangle, centred on the middle of the hull, with one corner
+// to the bow. MARK_SIDE is the length of each side. The keel curves up toward
+// the sides, so the side length keeps the base corners near the flat middle,
+// about 2.5 units out from the centre line.
+const MARK_SIDE = 5;
+const MARK_HEIGHT = (MARK_SIDE * Math.sqrt(3)) / 2;
+const MARK_TIP = (MARK_HEIGHT * 2) / 3; // x of the point, toward the bow
+const MARK_BASE = -MARK_HEIGHT / 3; // x of the base, toward the stern
+const MARK_HALF = MARK_SIDE / 2; // half the base width, in z
+const MARK_WIDTH = 0.4; // the stroke width
+const MARK_DROP = 0.012; // how far under the keel it sits
+
+function buildKeelMark() {
+  const outer = [
+    [MARK_TIP, 0],
+    [MARK_BASE, MARK_HALF],
+    [MARK_BASE, -MARK_HALF],
+  ];
+  // Shrink about the incentre, so each side of the inner triangle is
+  // MARK_WIDTH in from the outer side.
+  const side = (p, q) => Math.hypot(q[0] - p[0], q[1] - p[1]);
+  const a = side(outer[1], outer[2]);
+  const b = side(outer[0], outer[2]);
+  const c = side(outer[0], outer[1]);
+  const perimeter = a + b + c;
+  const centre = [
+    (a * outer[0][0] + b * outer[1][0] + c * outer[2][0]) / perimeter,
+    (a * outer[0][1] + b * outer[1][1] + c * outer[2][1]) / perimeter,
+  ];
+  const area = Math.abs(
+    (outer[1][0] - outer[0][0]) * (outer[2][1] - outer[0][1]) -
+      (outer[2][0] - outer[0][0]) * (outer[1][1] - outer[0][1]),
+  ) / 2;
+  const radius = (2 * area) / perimeter;
+  const k = (radius - MARK_WIDTH) / radius;
+  const inner = outer.map(([x, z]) => [centre[0] + (x - centre[0]) * k, centre[1] + (z - centre[1]) * k]);
+
+  const pos = [];
+  for (const [x, z] of [...outer, ...inner]) pos.push(x, -MARK_DROP, z);
+  // One quad for each side, between the outer and the inner edge.
+  const idx = [];
+  for (let n = 0; n < 3; n++) {
+    const m = (n + 1) % 3;
+    idx.push(n, m, 3 + m, n, 3 + m, 3 + n);
+  }
+  return toGeometry(pos, idx);
+}
+
 // `cargoMaterial` replaces the black fill on the cargo alone, for effects that
 // key off the cargo's per-module attributes. The caller owns and disposes it.
 export function createShip({ cargoMaterial } = {}) {
@@ -130,6 +187,10 @@ export function createShip({ cargoMaterial } = {}) {
   ship.add(new THREE.Mesh(buildHull(), fillMat));
   ship.add(new THREE.Mesh(buildDeck(), fillMat));
   ship.add(new THREE.Mesh(buildTransom(), fillMat));
+  // Blue is the paint mask for the keel mark (see buildKeelMark). Both sides
+  // draw, so the winding does not matter.
+  const markMat = new THREE.MeshBasicMaterial({ color: 0x0000ff, side: THREE.DoubleSide });
+  ship.add(new THREE.Mesh(buildKeelMark(), markMat));
   const cargo = createCargo(cargoMaterial ?? fillMat);
   ship.add(cargo);
   ship.userData.cargo = cargo;
@@ -141,6 +202,7 @@ export function createShip({ cargoMaterial } = {}) {
   ship.userData.dispose = () => {
     ship.traverse((o) => o.geometry?.dispose());
     fillMat.dispose();
+    markMat.dispose();
   };
 
   return ship;

@@ -131,7 +131,9 @@ The editing-to-live flow is:
 3. GitHub Actions builds and deploys (about 20–60 seconds)
 4. The live site updates automatically
 
-See `docs/deploy-plan.md` for the full one-time setup guide (repo creation, workflow, Pages, and custom-domain DNS).
+The workflow is `.github/workflows/deploy.yml`. It runs `npm ci` and `npm run build`, then publishes `dist/` to GitHub Pages.
+
+The ship is a separate Vite build in `ship/`. Run `npm run build:ship` after a change there, and commit the result in `embeds/ship/`. The deploy does not rebuild the ship.
 
 ---
 

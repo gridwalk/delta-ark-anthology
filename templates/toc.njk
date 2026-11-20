@@ -1,6 +1,8 @@
 {% extends "base.njk" %}
 
-{% block title %}Table of Contents &mdash; Runtime Season{% endblock %}
+{# With `selected`, this is an artist URL: the same page, with the listing
+   already collapsed (see buildArtistPages in build.js). #}
+{% block title %}{% if selected %}{{ selected.name }}{% else %}Table of Contents{% endif %} &mdash; Runtime Season{% endblock %}
 
 {% block bodyClass %}toc-page toc-ship{% endblock %}
 
@@ -24,9 +26,48 @@
 <section class="toc" style="--toc-lines-3: {{ rows3 }}; --toc-title-rows-3: {{ rows3 * 3 - entries }}; --toc-lines-2: {{ rows2 }}; --toc-title-rows-2: {{ rows2 * 2 - entries }}; --toc-lines-1: {{ rows1 }}; --toc-title-rows-1: {{ rows1 - entries }}">
   {% include "_toc-list.njk" %}
 
+  {# The artwork information, one block for each artist, all hidden until an
+     artist is chosen (see page-nav.js). The panel sits in the first listing
+     column, directly under the title box. On an artist URL, that artist's
+     block starts in view. #}
+  <div class="artwork-panel"{% if not selected %} hidden{% endif %}>
+    {% for artist in artists %}
+    <article class="artwork-info" data-slug="{{ artist.slug }}"{% if artist.video_url %} data-video="{{ artist.video_url }}"{% endif %}{% if artist.poster %} data-poster="{{ artist.poster }}"{% endif %}{% if not (selected and artist.slug == selected.slug) %} hidden{% endif %}>
+      {# The work title as the headline, then the artist name under it in the
+         body face. #}
+      {% if artist.work_title %}<h2 class="headline artwork-title">{{ artist.work_title }}</h2>{% endif %}
+      <p class="artwork-name">{{ artist.name }}</p>
+      {% if artist.country or artist.medium or artist.year %}
+      <p class="artwork-meta">{{ [artist.year, artist.country, artist.medium] | select | join(" · ") }}</p>
+      {% endif %}
+      <div class="artist-body">{{ artist.body | safe }}</div>
+      {% if artist.essay_url %}
+      <p class="artwork-essay"><a href="{{ artist.essay_url }}" target="_blank" rel="noopener">Read essay &rarr;</a></p>
+      {% endif %}
+    </article>
+    {% endfor %}
+  </div>
+
+  {# The artwork's media on an artist view: the video embed, or else the
+     poster. It is placed over the laser's end (see page-nav.js), and the
+     embed only exists while it shows, so a video stops when it goes. #}
+  <div class="artwork-media" hidden></div>
+
+  {# Links to the previous and next artist in the listing's order, in the
+     space under the media (see page-nav.js). #}
+  <nav class="artwork-pager" aria-label="More artworks" hidden>
+    <a href="/" class="pager-prev">Previous</a>
+    <a href="/" class="pager-next">Next</a>
+  </nav>
+
+  {# A black-to-clear shade behind the text column on an artist view. It must
+     come after the artwork panel: CSS shows it while the panel shows. #}
+  <div class="artwork-shade" aria-hidden="true"></div>
+
   {# Frames for the ship's fixed front, side, and top views. They are empty:
      the ship iframe draws each view into the space inside its frame. #}
-  <div class="ship-panel-stack" aria-hidden="true">
+  {# On an artist URL the tiles start hidden (see page-nav.js). #}
+  <div class="ship-panel-stack{% if selected %} is-hidden{% endif %}" aria-hidden="true">
     <div class="ship-panel"></div>
     <div class="ship-panel"></div>
     <div class="ship-panel"></div>
@@ -36,6 +77,7 @@
 
 {% block scripts %}
 <script src="/static/js/ship-highlight.js"></script>
+<script src="/static/js/page-nav.js"></script>
 {# TUNING: temporary dither and fog panel, shown with ?tune=1. #}
 <script src="/static/js/ship-tune.js"></script>
 {% endblock %}

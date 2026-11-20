@@ -179,6 +179,15 @@ export function createOutline(scenePass, options = {}) {
       const aboveWater = step(nearestShipDepth, waterDepth);
 
       let fill = waterPass.rgb.mul(waterInFront).mul(fogAt(waterDepth));
+      // Painted marks, such as the keel triangle (see buildKeelMark in
+      // ship.js), are in the blue channel. They fill in the line colour, with
+      // the same fog as the ship, wherever the water is not in front.
+      const paint = scenePass.getTextureNode('output').sample(uv()).b;
+      fill = mix(
+        fill,
+        lineColor.mul(fogAt(rawDepthAt(uv()))),
+        paint.mul(waterInFront.oneMinus()),
+      );
       // 1 on the backdrop's lines. They are dotted already, so the dither
       // must not touch them: two dot patterns on one line can cancel out.
       // compose() stores this as `this.undithered` (see main.js).

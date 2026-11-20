@@ -56,6 +56,24 @@ export const VIEWS = [
 export function createPanels({ buildPipeline, pixelRatio, bounds }) {
   const panels = [];
   let building = null;
+  // The clip edge from the framing page, in viewport pixels: each tile is
+  // hidden left of it. Null shows the tiles whole (see clip()).
+  let clipEdge = null;
+
+  // Clips one tile's canvas at clipEdge. A tile that is fully clipped is not
+  // drawn at all.
+  const applyClip = (panel) => {
+    const canvas = panel.renderer.domElement;
+    const rect = panel.rect;
+    if (clipEdge === null || !rect) {
+      canvas.style.clipPath = '';
+      panel.clipped = false;
+      return;
+    }
+    const inset = Math.min(Math.max(clipEdge - rect.x, 0), rect.width);
+    canvas.style.clipPath = inset > 0 ? `inset(0 0 0 ${inset}px)` : '';
+    panel.clipped = inset >= rect.width;
+  };
 
   async function build() {
     for (const view of VIEWS) {
@@ -151,7 +169,19 @@ export function createPanels({ buildPipeline, pixelRatio, bounds }) {
         panel.renderer.setSize(rect.width, rect.height);
         frame(panel, rect.width, rect.height);
         panel.shown = true;
+        panel.rect = rect;
+        applyClip(panel);
       });
+    },
+
+    /**
+     * Hides each tile left of `edge`, in viewport pixels, or shows the tiles
+     * whole with null. The framing page clips its tile frames at the same
+     * edge, so the frames and the pictures hide together.
+     */
+    clip(edge) {
+      clipEdge = Number.isFinite(edge) ? edge : null;
+      for (const panel of panels) applyClip(panel);
     },
 
     /**
@@ -200,7 +230,7 @@ export function createPanels({ buildPipeline, pixelRatio, bounds }) {
     render() {
       hideWindows.value = 1;
       for (const panel of panels) {
-        if (!panel.shown) continue;
+        if (!panel.shown || panel.clipped) continue;
         panel.setFocus(panel.focus);
         panel.pipeline.render();
       }

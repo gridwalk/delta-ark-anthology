@@ -1,13 +1,15 @@
 import * as THREE from 'three/webgpu';
 import { color, mix, mrt, normalView, output, pass, renderOutput, uniform } from 'three/tsl';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { createShip, LOA } from './ship.js';
+import { BEAM, createShip, LOA } from './ship.js';
 import { createOutline } from './outline.js';
 import { createWater } from './water.js';
 import { createCrawl } from './crawl.js';
 import { createFill } from './fill.js';
 import { createModuleView } from './modules.js';
-import { createHighlight } from './highlight.js';
+import { createHighlight, startFan } from './highlight.js';
+import { createTowers } from './towers.js';
+import { createLaser } from './laser.js';
 import { createDrop } from './drop.js';
 import { clock, isShown, transition } from './visibility.js';
 import { GROUPING, chooseKept } from './cargo.js';
@@ -68,6 +70,12 @@ const PIXEL_SCALE = Math.min(window.devicePixelRatio, 2);
 // - camera.spin: the speed of the automatic rotation. 2 is one turn in 30
 //   seconds, so 0.5 is one turn in 2 minutes. A negative value turns the
 //   other way.
+// - highlight.fan: the speed of the light's fan-out over a chunk, in hops
+//   from container to container per second.
+// - highlight.towerOdds: the odds that a container of a lit chunk, other
+//   than the hovered one, builds a tower. Only containers with nothing above
+//   them can build, and each chunk builds only once.
+// - highlight.towerRate: how fast a tower grows, in layers per second.
 // - camera.hold: seconds that the camera stays at a tile's view after a
 //   flight, before it starts back to the start height.
 // - camera.settle: how fast the camera goes back to the start height,
@@ -79,7 +87,8 @@ const TUNE = {
   cargo: { keep: 0.9, build: 40, overlap: 1 },
   tiles: { fogPush: 2.2, lineWeight: 3 },
   smear: { step: 1, rects: 16, size: 0.15, clearBlack: 1 },
-  camera: { spin: 0.15, hold: 0, settle: 0.1 },
+  camera: { spin: 0.15, hold: 0, settle: 0.02 },
+  highlight: { fan: 23, towerOdds: 0.25, towerRate: 20 },
 };
 
 // ?dither=1 puts an ordered dither on every view (see dither.js).
@@ -151,13 +160,22 @@ controls.enableDamping = true;
 controls.target.set(0, 2.2, 0);
 controls.minDistance = 4;
 controls.maxDistance = 120;
-// No manual orbit, zoom, or pan. The camera turns slowly around the ship by
-// itself, from the start view, at the same height and distance. A flight to
-// a tile's view keeps the turn going from that view.
-controls.enableRotate = false;
-controls.enableZoom = false;
+// A drag turns the camera around the ship, and the wheel zooms. There is no
+// pan, so the ship stays in the middle. Between drags, the camera also turns
+// slowly by itself. After a drag, it drifts back to the start view, the same
+// as after a tile click (see settleCamera).
+controls.enableRotate = true;
+controls.enableZoom = true;
 controls.enablePan = false;
 controls.autoRotate = true;
+let dragging = false;
+controls.addEventListener('start', () => {
+  dragging = true;
+});
+controls.addEventListener('end', () => {
+  dragging = false;
+  holdUntil = performance.now() / 1000 + TUNE.camera.hold;
+});
 controls.autoRotateSpeed = TUNE.camera.spin;
 
 // The start view, which the camera always drifts back to (see settleCamera).
@@ -170,8 +188,11 @@ const START_VIEW = new THREE.Spherical().setFromVector3(
 // water needs to write depth everywhere, not only where a line happens to fall.
 const water = createWater({
   // Big enough that the plane's own square edge stays outside the fade
-  // circle across the whole default view, so only the circle shows.
-  size: LOA * 10,
+  // circle in every view, so only the circle shows. On the artwork view the
+  // camera is far out and the fade moves out with it (see fadeShift), so the
+  // circle reaches about 170 units from the camera.
+  size: LOA * 30,
+  segments: 300, // about 2 units per segment
   cell: 2.5, // one cell per 50 m
   // A narrow fade: the grid holds full strength out to fadeNear, then falls
   // off over a short band to nothing at fadeFar. Wide enough to soften the
@@ -189,6 +210,8 @@ seaScene.add(water);
 const highlight = createHighlight();
 const drop = createDrop(highlight.strength);
 let litGroup = null;
+// The chunk towers (see towers.js). Only the chunk grouping builds them.
+const towers = createTowers(highlight);
 
 const shipOptions = { cargoMaterial: highlight.material };
 let ship = createShip(shipOptions);
@@ -234,6 +257,7 @@ let panelRects = [];
 function respawn(create = createShip) {
   crawl?.dispose();
   drop.clear();
+  towers.clear();
   highlight.set(null);
   litGroup = null;
   scene.remove(ship);
@@ -341,6 +365,22 @@ function onMessage(event) {
   // second click on the same tile soon after flies to the reverse view (see
   // viewForClick).
   // { type: 'ship:tune', dither: {...}, fog: {...} } sets the TUNE values.
+  // { type: 'ship:focusCenter', x, y } is where, in viewport pixels, the
+  // laser's end goes on the artwork view: the centre of the media box. null
+  // is the middle of the window on that axis.
+  if (event.data?.type === 'ship:focusCenter') {
+    focusCenterX = Number.isFinite(event.data.x) ? event.data.x : null;
+    focusCenterY = Number.isFinite(event.data.y) ? event.data.y : null;
+    applyViewOffset();
+    camera.updateProjectionMatrix();
+    return;
+  }
+  // { type: 'ship:focus', group } fires the laser from that chunk and flies
+  // the camera out along it. group: null goes back (see focusGroup).
+  if (event.data?.type === 'ship:focus') {
+    focusGroup(Number.isInteger(event.data.group) ? event.data.group : null);
+    return;
+  }
   if (event.data?.type === 'ship:tune') {
     applyTune(event.data);
     return;
@@ -354,6 +394,12 @@ function onMessage(event) {
   // it again.
   if (event.data?.type === 'ship:cursor') {
     panels.point(event.data.index, event.data.x, event.data.y);
+    return;
+  }
+  // { type: 'ship:panelClip', x } hides the tiles left of x, in viewport
+  // pixels. x: null shows them whole (see clip in panels.js).
+  if (event.data?.type === 'ship:panelClip') {
+    panels.clip(event.data.x);
     return;
   }
   if (event.data?.type === 'ship:panels') {
@@ -373,14 +419,28 @@ function onMessage(event) {
 
 // Lights `group` on the ship, or clears the light with null. A hovered name
 // in the listing and a hovered container on the ship both come here.
-function setGroup(group) {
+//
+// `origin` is the module under the pointer, for a hover on the ship. The
+// light fans out from it (see startFan). A name hover has no origin, so the
+// light fans out from the chunk's centre.
+function setGroup(group, origin = null) {
   const { cargo } = ship.userData;
   const next = Number.isInteger(group) && group >= 0 && group < cargo.userData.groupCount ? group : null;
+  let litAt = null;
+  if (next !== null && next !== litGroup) {
+    litAt = startFan(cargo, next, origin, clock.value, TUNE.highlight.fan);
+  }
   highlight.set(next);
 
-  // With chunk groups, a hover only lights the chunk's edges. Nothing hides,
-  // builds, or drops.
+  // With chunk groups, a hover lights the chunk's edges, and the first time
+  // a chunk lights, it builds towers (see towers.js). Nothing hides or drops.
   if (GROUPING === 'chunks') {
+    if (litAt) {
+      towers.build(cargo, next, origin, litAt, {
+        odds: TUNE.highlight.towerOdds,
+        rate: TUNE.highlight.towerRate,
+      });
+    }
     litGroup = next;
     return;
   }
@@ -440,12 +500,67 @@ window.addEventListener('pointermove', (event) => {
   pointer.y = event.clientY;
   pointer.inside = true;
 });
+
+// On the artwork view (an artist is chosen), the orbit controls are off: no
+// drag, zoom, or turn (see the render loop). The wheel goes to the framing
+// page instead, so the page scrolls with the artwork text also when the
+// pointer is over the ship. preventDefault stops the browser from also
+// passing the wheel on by itself, which would scroll twice.
+window.addEventListener(
+  'wheel',
+  (event) => {
+    if (focused === null || window.parent === window) return;
+    event.preventDefault();
+    const dy = event.deltaMode === 1 ? event.deltaY * 16 : event.deltaY;
+    window.parent.postMessage({ type: 'ship:wheel', dy }, window.location.origin);
+  },
+  { passive: false, capture: true },
+);
+
+// A click on a container (a press and release with almost no movement, so not
+// a drag) chooses its chunk's artist. The framing page does the navigation
+// and then sends 'ship:focus' back, so a click here and a click on the name
+// in the listing do the same thing.
+const CLICK_SLOP = 5; // pixels
+let pressAt = null;
+window.addEventListener('pointerdown', (event) => {
+  pressAt = { x: event.clientX, y: event.clientY };
+});
+window.addEventListener('pointerup', (event) => {
+  if (!pressAt) return;
+  const moved = Math.hypot(event.clientX - pressAt.x, event.clientY - pressAt.y);
+  pressAt = null;
+  if (moved > CLICK_SLOP) return;
+  pointer.x = event.clientX;
+  pointer.y = event.clientY;
+  pointer.inside = true;
+  const group = pickGroup(true);
+  if (group === null) return;
+  // On the artwork view, a click on any container goes back to the listing.
+  if (focused !== null) {
+    highlight.setAll(false);
+    if (window.parent !== window) {
+      window.parent.postMessage({ type: 'ship:home' }, window.location.origin);
+    } else {
+      setGroup(null);
+      focusGroup(null);
+    }
+    return;
+  }
+  if (window.parent !== window) {
+    window.parent.postMessage({ type: 'ship:select', group }, window.location.origin);
+  } else {
+    setGroup(group);
+    focusGroup(group);
+  }
+});
 // The pointer left the ship, maybe onto a name in the listing. The ship drops
 // its own hover at once, without a delay, and does not clear the light
 // itself: the framing page clears it, but only if no name has the hover.
 document.documentElement.addEventListener('mouseleave', () => {
   pointer.inside = false;
   document.body.style.cursor = '';
+  highlight.setAll(false);
   if (shipHover === null) return;
   shipHover = null;
   pickPending = null;
@@ -456,9 +571,15 @@ document.documentElement.addEventListener('mouseleave', () => {
   }
 });
 
-// The group of the nearest container in view under the pointer, or null.
-function pickGroup() {
-  if (!pointer.inside || !ship.visible) return null;
+// The nearest container in view under the pointer: its group goes in the
+// return value, and its index in pickModule. Null if there is none.
+let pickModule = null;
+function pickGroup(forClick = false) {
+  pickModule = null;
+  // A drag turns the camera, so it does not light the containers it passes.
+  // A click is checked after its pointer-up, when the controls may still
+  // count it as a drag.
+  if ((dragging && !forClick) || !pointer.inside || !ship.visible) return null;
   const { cargo } = ship.userData;
   const { boxes, moduleGroup } = cargo.userData;
   if (!boxes) return null;
@@ -481,12 +602,23 @@ function pickGroup() {
     if (distance < best) {
       best = distance;
       group = moduleGroup[n];
+      pickModule = n;
     }
   }
   return group;
 }
 
 function updatePick(time) {
+  // On the artwork view, the ship is one button back to the listing: with the
+  // pointer over any container, every container lights, and a click goes
+  // home (see the pointer-up handler). The chunks do not light one by one.
+  if (focused !== null) {
+    const over = pickGroup() !== null;
+    highlight.setAll(over);
+    document.body.style.cursor = over ? 'pointer' : '';
+    return;
+  }
+  highlight.setAll(false);
   const candidate = pickGroup();
   document.body.style.cursor = candidate === null ? '' : 'pointer';
   if (candidate === shipHover) {
@@ -501,7 +633,7 @@ function updatePick(time) {
   const wait = candidate === null ? PICK_CLEAR : shipHover === null ? 0 : PICK_SWITCH;
   if (time - pickSince < wait) return;
   shipHover = candidate;
-  setGroup(candidate);
+  setGroup(candidate, pickModule);
   if (window.parent !== window) {
     window.parent.postMessage({ type: 'ship:hover', group: candidate }, window.location.origin);
   }
@@ -537,12 +669,36 @@ const VIEW_DROP = 0.08;
 // open space instead of the middle of the window, and a little low. The camera
 // does not move: only the image slides, so the angle and the orbit are
 // unchanged.
+// While an artist is chosen, the listing's shift eases out (offsetShare goes
+// to 0) and the artwork view's shift eases in. The camera looks at the
+// laser's end, so that end lands at focusCenterX across and the middle of the
+// window down: the middle of the space that the text column leaves free (see
+// updateViewOffset).
+let offsetShare = 1;
+let focusCenterX = null;
+let focusCenterY = null;
+const OFFSET_EASE = 4; // per second, about the length of a camera flight
+function updateViewOffset(delta) {
+  const goal = focused === null ? 1 : 0;
+  if (offsetShare === goal) return;
+  const k = 1 - Math.exp(-OFFSET_EASE * delta);
+  offsetShare += (goal - offsetShare) * k;
+  if (Math.abs(goal - offsetShare) < 0.001) offsetShare = goal;
+  applyViewOffset();
+  camera.updateProjectionMatrix();
+}
 function applyViewOffset() {
   const width = window.innerWidth;
   const height = window.innerHeight;
-  const shiftX = freeWidth === null ? 0 : Math.max(0, (width - freeWidth) / 2);
+  const listShift = freeWidth === null ? 0 : Math.max(0, (width - freeWidth) / 2);
+  // A negative x offset moves the image right, to a centre right of the
+  // middle.
+  const focusShift = focusCenterX === null ? 0 : width / 2 - focusCenterX;
+  const shiftX = listShift * offsetShare + focusShift * (1 - offsetShare);
   // A negative offset moves the sampled window up, so the image moves down.
-  const shiftY = -height * VIEW_DROP;
+  // A positive y offset moves the image up, to a centre above the middle.
+  const focusShiftY = focusCenterY === null ? 0 : height / 2 - focusCenterY;
+  const shiftY = -height * VIEW_DROP * offsetShare + focusShiftY * (1 - offsetShare);
   camera.setViewOffset(width, height, shiftX, shiftY, width, height);
 }
 
@@ -559,6 +715,138 @@ const flight = createFlight(camera, controls);
 
 // Breathing room around the ship when the main view frames a panel view.
 const VIEW_MARGIN = 1.15;
+
+// The chosen artist. A choice fires a white laser out of that artist's chunk
+// and flies the camera to look along it, so that the chunk is near the
+// bottom-right corner (CORNER) and the laser's end is at the centre of the
+// media box (see focusCenterX and focusCenterY). The automatic turn and the
+// drift back to the start view stop until the choice ends.
+//
+// The laser points away from the ship: along the outward normal of an
+// ellipse around the hull, through the chunk. Thus a chunk at the stern
+// points back, one at the bow points forward, and one on a side points
+// sideways, and no laser crosses the ship. The camera stands a quarter turn
+// around from that direction, so the laser runs from the bottom right up to
+// the centre of the view, toward the screen's left. Each chunk also has its
+// own tilt below the horizon, from FOCUS_TILT_MIN to FOCUS_TILT_MAX.
+//
+// The chunks are numbered in order around the ship (see orderAround in
+// cargo.js), so the previous and the next artist are neighbouring chunks,
+// with nearly the same outward direction. A move between them turns the
+// camera only a little.
+//
+// With the direction fixed, the rest follows: the chunk is on the line of
+// sight through CORNER, FOCUS_DISTANCE from the camera, and the laser's end
+// is straight ahead, at the same distance. The laser then always rises,
+// because the corner is below the centre of the view: from about 15 degrees
+// at the steepest tilt to about 36 at the flattest.
+const FOCUS_TILT_MIN = THREE.MathUtils.degToRad(15);
+const FOCUS_TILT_MAX = THREE.MathUtils.degToRad(45);
+// A fixed value in [0, 1) for each group and `salt`, for the chunk's angles.
+const groupShare = (group, salt) => {
+  const v = Math.sin((group + 1) * 12.9898 + salt * 78.233) * 43758.5453;
+  return v - Math.floor(v);
+};
+const LASER_TIME = 0.35; // seconds for the laser to reach full length
+const LASER_BACK = 0.25; // seconds to pull it back
+// The camera's distance from the laser's end on the artwork view. Close
+// enough that the fog leaves the water grid faintly in view, which it does
+// not at the orbit's largest distance.
+const FOCUS_DISTANCE = 80;
+// Where the chunk shows on the artwork view, in normalized screen units:
+// -1 to 1 from left to right and from bottom to top.
+const CORNER = new THREE.Vector2(0.8, -0.75);
+
+// CORNER, in the normalized units of the camera before its picture shift.
+// The picture is shifted so that its centre is at focusCenterX and
+// focusCenterY, so a place in the window moves by the same amount.
+function cornerGoal() {
+  const half = window.innerWidth / 2;
+  const halfY = window.innerHeight / 2;
+  const centre = focusCenterX ?? half;
+  const centreY = focusCenterY ?? halfY;
+  return new THREE.Vector2(
+    (half * (1 + CORNER.x) - centre) / half,
+    (centreY - halfY * (1 - CORNER.y)) / halfY,
+  );
+}
+
+// The camera position and the laser's end for a chunk at `start`, with the
+// camera turned `theta` around the ship and tilted `tilt` down.
+function focusView(start, theta, tilt) {
+  // Forward, right and up of a camera with that turn and tilt. The world up
+  // is kept, as the orbit controls do, so the view has no roll.
+  const forward = new THREE.Vector3(
+    -Math.sin(theta) * Math.cos(tilt),
+    -Math.sin(tilt),
+    -Math.cos(theta) * Math.cos(tilt),
+  );
+  const right = new THREE.Vector3().crossVectors(forward, camera.up).normalize();
+  const up = new THREE.Vector3().crossVectors(right, forward);
+  // The line of sight through CORNER.
+  const goal = cornerGoal();
+  const tanY = Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2);
+  const ray = forward
+    .clone()
+    .addScaledVector(right, goal.x * tanY * camera.aspect)
+    .addScaledVector(up, goal.y * tanY)
+    .normalize();
+  const position = start.clone().addScaledVector(ray, -FOCUS_DISTANCE);
+  const end = position.clone().addScaledVector(forward, FOCUS_DISTANCE);
+  return { position, end };
+}
+// One pixel wide. Line2's width already follows the pixel ratio, so it is
+// not multiplied by PIXEL_SCALE here.
+const laser = createLaser(seaScene, { width: 1 });
+let focused = null;
+
+function focusGroup(group) {
+  if (group === focused) return;
+  if (group === null) {
+    focused = null;
+    laser.retract(LASER_BACK);
+    controls.autoRotate = true;
+    // Back to the start distance and height, from the current side.
+    const turn = new THREE.Spherical().setFromVector3(camera.position.clone().sub(controls.target));
+    const home = new THREE.Spherical(START_VIEW.radius, START_VIEW.phi, turn.theta);
+    flight.fly(new THREE.Vector3().setFromSpherical(home).add(START_TARGET), START_TARGET);
+    return;
+  }
+
+  const { cargo } = ship.userData;
+  const { boxes, moduleGroup } = cargo.userData;
+  if (!boxes) return;
+  // The chunk's centre in plan, and its highest top, in the cargo's space.
+  let x = 0, z = 0, top = -Infinity, count = 0;
+  for (let n = 0; n < moduleGroup.length; n++) {
+    if (moduleGroup[n] !== group) continue;
+    x += (boxes[n * 6] + boxes[n * 6 + 3]) / 2;
+    z += (boxes[n * 6 + 2] + boxes[n * 6 + 5]) / 2;
+    top = Math.max(top, boxes[n * 6 + 4]);
+    count++;
+  }
+  if (!count) return;
+  focused = group;
+  cargo.updateWorldMatrix(true, false);
+  const start = cargo.localToWorld(new THREE.Vector3(x / count, top, z / count));
+
+  // The outward normal of an ellipse with the hull's length and beam, at the
+  // chunk: (x / a^2, z / b^2). The camera stands a quarter turn around from
+  // it, on up x outward, so the laser runs to the left of the view.
+  const local = new THREE.Vector3(start.x - START_TARGET.x, 0, start.z - START_TARGET.z);
+  const out = new THREE.Vector3(local.x / (LOA / 2) ** 2, 0, local.z / (BEAM / 2) ** 2);
+  if (out.lengthSq() < 1e-8) out.set(-1, 0, 0);
+  out.normalize();
+  const back = new THREE.Vector3(0, 1, 0).cross(out);
+  const theta = Math.atan2(back.x, back.z);
+  const tilt = FOCUS_TILT_MIN + groupShare(group, 2) * (FOCUS_TILT_MAX - FOCUS_TILT_MIN);
+  const view = focusView(start, theta, tilt);
+  const toEnd = view.end.clone().sub(start);
+  const length = toEnd.length();
+  laser.fire(start, toEnd.normalize(), length, LASER_TIME);
+  controls.autoRotate = false;
+  flight.fly(view.position, view.end);
+}
 
 // A second click on the same tile within REVERSE_WINDOW seconds of the last
 // one gives the reverse view: from the stern, from the other side, or from
@@ -629,7 +917,8 @@ function updateSmear(time, delta) {
   if (SMEAR.strength.value === 0) smearCount = 0;
 }
 
-// After a flight to a tile's view, the camera holds that view for a while.
+// After a flight to a tile's view or a drag, the camera holds that view for
+// a while.
 // Then it eases back to the start view's height (polar angle), distance, and
 // look-at point. The auto-rotation keeps turning it around the ship all the
 // time, so the turn angle is left alone.
@@ -687,9 +976,13 @@ renderer.setAnimationLoop(() => {
   if (flight.update(delta)) {
     flying = true;
   } else {
+    // A flight turns the controls back on when it ends. On the artwork view
+    // they stay off.
+    controls.enabled = focused === null;
     if (flying) holdUntil = time + TUNE.camera.hold;
     flying = false;
-    if (time >= holdUntil) settleCamera(delta);
+    // No return while the pointer drags the camera.
+    if (!dragging && focused === null && time >= holdUntil) settleCamera(delta);
     controls.update(delta);
   }
   clock.value = time;
@@ -697,6 +990,11 @@ renderer.setAnimationLoop(() => {
   updateSmear(time, delta);
   highlight.update(delta);
   drop.update(delta);
+  laser.update(delta);
+  // The water's fade follows the camera's distance from the ship (see
+  // fadeShift in water.js), so the grid also shows from far out.
+  water.userData.fadeShift.value = Math.max(0, camera.position.distanceTo(START_TARGET) - START_VIEW.radius);
+  updateViewOffset(delta);
   lastTime = time;
   if (fill.update(time)) {
     crawl ??= createCrawl(view, ship.userData.cargo);
@@ -723,6 +1021,8 @@ if (import.meta.hot) {
     window.removeEventListener('resize', onResize);
     window.removeEventListener('message', onMessage);
     highlight.dispose();
+    towers.dispose();
+    laser.dispose();
     drop.dispose();
     panels.dispose();
     controls.dispose();

@@ -54,7 +54,12 @@
       markShipHover(Number.isInteger(group) ? group : null);
       // The pointer left the ship. Clear the light unless the pointer is now
       // on a name, which has lit its own group.
-      if (event.data.left && !document.querySelector('.toc-link:hover')) send(null);
+      // In the artist view (see page-nav.js), go back to the chosen artist.
+      if (event.data.left && !document.querySelector('.toc-link:hover')) {
+        var list = document.querySelector('.toc-list');
+        var selected = list && list.dataset.selected;
+        send(selected !== undefined ? Number(selected) : null);
+      }
       return;
     }
     if (event.data && event.data.type === 'ship:ready') {
@@ -97,7 +102,14 @@
     var group = Number(link.dataset.index);
     link.addEventListener('mouseenter', function () { send(group); });
     link.addEventListener('focus', function () { send(group); });
-    link.addEventListener('mouseleave', function () { send(null); });
-    link.addEventListener('blur', function () { send(null); });
+    // While the listing is collapsed (see page-nav.js), the chosen artist
+    // stays lit. A row that hides under the pointer fires mouseleave, which
+    // must not clear that light.
+    function leave() {
+      if (link.closest('.toc-list.is-collapsed')) return;
+      send(null);
+    }
+    link.addEventListener('mouseleave', leave);
+    link.addEventListener('blur', leave);
   });
 })();

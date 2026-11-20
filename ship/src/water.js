@@ -30,6 +30,7 @@ import {
  */
 export function createWater({
   size,
+  segments = 220,
   cell = 1,
   fadeNear,
   fadeFar,
@@ -38,7 +39,9 @@ export function createWater({
   drift = 0,
 }) {
   // Pre-rotated so local XZ matches world XZ and we can displace Y directly.
-  const geometry = new THREE.PlaneGeometry(size, size, 220, 220);
+  // `segments` per side. The waves' shortest wave is about 27 units long, so
+  // a few units per segment keeps them smooth.
+  const geometry = new THREE.PlaneGeometry(size, size, segments, segments);
   geometry.rotateX(-Math.PI / 2);
 
   // Deliberately unrealistic: at 1 unit ~= 20 m, a physically-scaled 2 m swell
@@ -84,7 +87,12 @@ export function createWater({
 
   // With fadeNear equal to fadeFar the grid ends in a hard edge. smoothstep
   // is undefined when its edges meet, so that case gets a plain cut instead.
-  const distance = positionView.length();
+  // fadeShift moves the fade out by that many units. main.js sets it to how
+  // much farther the camera is from the ship than in the start view, so the
+  // grid around the ship fades at the same distance from the ship at any
+  // zoom, and not only at the start view's distance.
+  const fadeShift = uniform(0);
+  const distance = positionView.length().sub(fadeShift);
   const fade =
     fadeFar > fadeNear
       ? oneMinus(smoothstep(float(fadeNear), float(fadeFar), distance))
@@ -98,6 +106,7 @@ export function createWater({
   material.colorNode = color(lineColor).mul(gridMask(float(cell), weight)).mul(fade);
 
   const water = new THREE.Mesh(geometry, material);
+  water.userData.fadeShift = fadeShift;
   water.userData.amplitude = amplitude;
   water.userData.speed = speed;
   water.userData.lineWeight = weight;

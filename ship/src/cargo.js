@@ -36,6 +36,19 @@ const WINDOW_RELIEF = 0.01;
 const WINDOW_MARGIN = 0.024;
 const WINDOW_GAP = 0.014;
 const WINDOW_FILL = 0.8;
+// Medium and large containers are almost covered (see isLarge).
+const WINDOW_FILL_LARGE = 0.95;
+
+// Antennas: thin masts on the roofs of some containers with nothing above
+// them (see pushAntenna). Heights in units, radius in units.
+const ANTENNA_ODDS = 0.07;
+const ANTENNA_MIN = 0.8;
+const ANTENNA_MAX = 2.4;
+const ANTENNA_RADIUS = 0.014;
+// Roof shapes with a clear top point for the mast's base. A shed slopes, an
+// L shape can miss its centre, and a split has two heights, so they get none.
+// A stepped module can end below its full height, so it gets none either.
+const ANTENNA_KINDS = ['box', 'chamfer', 'ribbed', 'frustum', 'prism', 'tank', 'gabled'];
 
 // --- grid -----------------------------------------------------------------
 
@@ -299,12 +312,39 @@ const KINDS = [
   ['tank', 0.05, (fw, fd) => Math.abs(fw - fd) <= 1],
 ];
 
-// Kinds with a full, flat top, so a module above them looks carried.
-const FLAT_TOP = ['box', 'chamfer', 'ribbed'];
 
+// Medium and large containers must not show big blank walls. They take only
+// the kinds with flat, upright walls, and those walls are almost covered in
+// windows (see WINDOW_FILL_LARGE and windowSpec).
+const LARGE_KINDS = [
+  ['box', 0.4],
+  ['chamfer', 0.25],
+  ['gabled', 0.2],
+  ['shed', 0.15],
+];
+
+function isLarge(m) {
+  const area = m.fw * m.fd;
+  return Boolean(m.landmark) || area >= 6 || (area >= 4 && m.h >= 3);
+}
+
+// Picks from `kinds` ([kind, odds]) with one random number `r` in [0, 1).
+function pickKind(kinds, r) {
+  const total = kinds.reduce((sum, [, odds]) => sum + odds, 0);
+  let left = r * total;
+  for (const [kind, odds] of kinds) {
+    if (left < odds) return kind;
+    left -= odds;
+  }
+  return kinds[kinds.length - 1][0];
+}
+
+// Each call uses exactly one random number, so the kinds never change the
+// layout: the packer's later random numbers stay the same.
 function chooseKind(rand, fw, fd, h, support) {
   // A bridge needs a flat underside and solid ends.
   if (support === 'bridge') return rand() < 0.3 ? 'ribbed' : 'box';
+  if (isLarge({ fw, fd, h })) return pickKind(LARGE_KINDS, rand());
   // Only the kinds that fit share the odds. Their odds scale up, so a small
   // module, which fits fewer kinds, is not more often a box.
   const fitting = KINDS.filter(([, , fits]) => fits(fw, fd, h));
@@ -377,15 +417,10 @@ function tryLandmark(rand, occ, owner, inVoid, modules, fw, fd, h, midships = fa
 
     const top = t === heights.length - 1;
     const r = rand();
-    const kind = !top
-      ? FLAT_TOP[Math.floor(r * FLAT_TOP.length)]
-      : Math.abs(tw - td) <= 1 && r < 0.2 ? 'prism'
-      : r < 0.35 ? 'frustum'
-      : r < 0.5 ? 'stepped'
-      : r < 0.62 ? 'gabled'
-      : r < 0.72 ? 'chamfer'
-      : r < 0.8 ? 'ribbed'
-      : 'box';
+    // A large block's parts are large containers, so they take the kinds
+    // with flat walls for windows (see LARGE_KINDS). The lower parts need a
+    // flat top too.
+    const kind = !top ? (r < 0.6 ? 'box' : 'chamfer') : pickKind(LARGE_KINDS, r);
 
     modules.push({ i: ti, k: tk, y, fw: tw, fd: td, h: th, kind, bridge: false, landmark: true });
     y += th;
@@ -566,7 +601,8 @@ function exposure(occ, m) {
 // the groups that side gets. Then each side is cut again, until each part
 // has one group. A cut goes through the whole height, so a chunk is a block
 // of whole stacks, except where a cut falls inside one stack. The groups
-// come out in order along the ship, so the listing order follows the hull.
+// are then numbered in order around the ship (see orderAround), so the
+// listing order goes once around the hull.
 //
 // A cut leaves at least one module for each group on each side, so a large
 // landmark tier with a lot of exposure cannot leave a group empty. After the
@@ -617,7 +653,36 @@ function assignChunks(modules, occ, groups, adjacency) {
 
   split(items, 0, groups);
   joinStrays(group, groups, adjacency, items);
-  return group;
+  return orderAround(group, groups, items);
+}
+
+// Numbers the chunks in order around the ship, so the listing's neighbours
+// are neighbours on the ship too. The angle of each chunk's centre is taken
+// on the hull's own proportions (length and beam both scaled to 1), so a long
+// ship does not crowd the side chunks together. The order starts at the
+// stern and goes around once. The listing order of the artists does not
+// change: only which chunk each one gets.
+function orderAround(group, groups, items) {
+  const sum = Array.from({ length: groups }, () => ({ x: 0, z: 0, n: 0 }));
+  for (const { n, x, z } of items) {
+    const g = group[n];
+    if (g < 0) continue;
+    sum[g].x += x;
+    sum[g].z += z;
+    sum[g].n++;
+  }
+  const angle = sum.map(({ x, z, n }) => {
+    if (!n) return 0;
+    const u = (x / n - NX / 2) / (NX / 2);
+    const v = (z / n - NZ / 2) / (NZ / 2);
+    // From the stern (angle pi), so the order runs stern, one side, bow,
+    // other side.
+    return (Math.atan2(v, u) - Math.PI + 4 * Math.PI) % (2 * Math.PI);
+  });
+  const order = angle.map((a, g) => g).sort((p, q) => angle[p] - angle[q]);
+  const renumber = new Int32Array(groups);
+  order.forEach((g, rank) => (renumber[g] = rank));
+  return group.map((g) => (g < 0 ? g : renumber[g]));
 }
 
 // Joins each stray piece of a chunk to the neighbouring chunk that it touches
@@ -734,6 +799,9 @@ const RISE_MAX = 10;
 // module. Each tower picks one size in this range.
 const SMALL_MIN = 0.5;
 const SMALL_MAX = 0.7;
+// No tower reaches higher than half a ship length above the deck, in layers.
+// A tower stops at the last copy that fits under this line.
+const TOWER_TOP = (0.5 * LOA) / LAYER_H;
 const RISERS_MIN = 1;
 const RISERS_MAX = 3;
 
@@ -865,7 +933,9 @@ export function buildDrop(cargo, group, kept = null, rand = Math.random) {
     const m = modules[n];
     const cx = cellX(m.i) + (m.fw * CELL) / 2;
     const cz = cellZ(m.k) + (m.fd * CELL) / 2;
-    const { start, count, indexStart, indexCount } = moduleRanges[n];
+    // The copy leaves out the module's antenna, so a stack of copies has no
+    // mast sticking up through it (see copyCount in createCargo).
+    const { start, copyCount: count, indexStart, copyIndexCount: indexCount } = moduleRanges[n];
     const baseY = DEPTH + m.y * LAYER_H;
     const squash = layers / m.h;
     const y0 = DEPTH + bottom * LAYER_H;
@@ -899,7 +969,8 @@ export function buildDrop(cargo, group, kept = null, rand = Math.random) {
     return copies;
   };
 
-  const candidates = members.filter((n) => roomAbove(n) >= RISE_MIN);
+  // A container with an antenna has a mast on its roof, so it does not rise.
+  const candidates = members.filter((n) => !modules[n].antenna && roomAbove(n) >= RISE_MIN);
   for (let n = candidates.length - 1; n > 0; n--) {
     const r = Math.floor(rand() * (n + 1));
     [candidates[n], candidates[r]] = [candidates[r], candidates[n]];
@@ -927,6 +998,7 @@ export function buildDrop(cargo, group, kept = null, rand = Math.random) {
     for (let k = 1; k <= copies; k++) {
       const scale = k >= firstSmall ? small : 1;
       const layers = m.h * scale;
+      if (bottom + layers > TOWER_TOP) break;
       pushCopy(n, bottom, layers, bottom - m.y, scale);
       bottom += layers;
     }
@@ -953,6 +1025,146 @@ export function buildDrop(cargo, group, kept = null, rand = Math.random) {
   geometry.setAttribute('window', new THREE.Float32BufferAttribute(windows, 1));
   geometry.setIndex(indices);
   geometry.userData.risers = raised;
+  return geometry;
+}
+
+/**
+ * Geometry for the towers of one chunk group: copies of a module stacked on
+ * top of it, full size at the bottom and smaller near the top, as with the
+ * drop's risers.
+ *
+ * - `origin` always builds a tower, if it can. Each other module of the group
+ *   builds one with the odds `odds`. The parts of a large block never build.
+ * - A module can build only if nothing is directly above it: no module, and
+ *   no tower from an earlier call. A tower stops below anything in its way.
+ * - `litAt(n)` is the time that module n lights. Its tower starts to grow
+ *   then, at `rate` layers a second. Each vertex carries `showAt`, the time
+ *   its copy appears, and `group`, so the tower can light with its chunk.
+ *
+ * The cells of each new tower are marked in cargo.userData.solid, so later
+ * towers do not grow into it. Returns null if no tower was built.
+ */
+export function buildTowers(cargo, group, origin, litAt, { odds, rate, rand = Math.random }) {
+  const { modules, moduleGroup, moduleRanges, basePositions } = cargo.userData;
+  if (!modules) return null;
+  const baseNormals = cargo.geometry.attributes.normal.array;
+  const baseWindows = cargo.geometry.attributes.window.array;
+  const baseIndices = cargo.geometry.index.array;
+
+  // Every module's cells, made once for each cargo. Towers add to it.
+  if (!cargo.userData.solid) {
+    const grid = new Uint8Array(NX * NZ * GRID_LAYERS);
+    for (const m of modules) {
+      for (let a = m.i; a < m.i + m.fw; a++) {
+        for (let b = m.k; b < m.k + m.fd; b++) {
+          for (let c = m.y; c < Math.min(m.y + m.h, GRID_LAYERS); c++) grid[at(a, b, c)] = 1;
+        }
+      }
+    }
+    cargo.userData.solid = grid;
+  }
+  const solid = cargo.userData.solid;
+  const layerFree = (m, c) => {
+    if (c >= GRID_LAYERS) return true;
+    for (let a = m.i; a < m.i + m.fw; a++) {
+      for (let b = m.k; b < m.k + m.fd; b++) if (solid[at(a, b, c)]) return false;
+    }
+    return true;
+  };
+  // Whole copies of module n that fit on top of it, up to RISE_MAX.
+  const room = (m) => {
+    let copies = 0;
+    for (let c = m.y + m.h; copies < RISE_MAX; c += m.h) {
+      for (let layer = c; layer < c + m.h; layer++) if (!layerFree(m, layer)) return copies;
+      copies++;
+    }
+    return copies;
+  };
+
+  const positions = [];
+  const normals = [];
+  const windows = [];
+  const groups = [];
+  const showAt = [];
+  const indices = [];
+
+  const pushCopy = (n, bottom, layers, scale, time) => {
+    const m = modules[n];
+    // The copy leaves out the module's antenna, so a stack of copies has no
+    // mast sticking up through it (see copyCount in createCargo).
+    const { start, copyCount: count, indexStart, copyIndexCount: indexCount } = moduleRanges[n];
+    const cx = cellX(m.i) + (m.fw * CELL) / 2;
+    const cz = cellZ(m.k) + (m.fd * CELL) / 2;
+    const baseY = DEPTH + m.y * LAYER_H;
+    const squash = layers / m.h;
+    const y0 = DEPTH + bottom * LAYER_H;
+    const copyStart = positions.length / 3;
+    for (let v = start; v < start + count; v++) {
+      positions.push(
+        cx + (basePositions[v * 3] - cx) * scale,
+        y0 + (basePositions[v * 3 + 1] - baseY) * squash,
+        cz + (basePositions[v * 3 + 2] - cz) * scale,
+      );
+      normals.push(baseNormals[v * 3], baseNormals[v * 3 + 1], baseNormals[v * 3 + 2]);
+      windows.push(baseWindows[v]);
+      groups.push(group);
+      showAt.push(time);
+    }
+    for (let x = indexStart; x < indexStart + indexCount; x++) {
+      indices.push(baseIndices[x] - start + copyStart);
+    }
+  };
+
+  const members = [];
+  for (let n = 0; n < modules.length; n++) if (moduleGroup[n] === group) members.push(n);
+  // The origin goes first, so it gets the room before its neighbours.
+  members.sort((p, q) => (p === origin ? -1 : q === origin ? 1 : 0));
+
+  let built = 0;
+  for (const n of members) {
+    if (n !== origin && rand() >= odds) continue;
+    const m = modules[n];
+    // The parts of a large block do not build. Their copies are up to 13
+    // layers high, so even a short tower of them is very tall.
+    if (m.landmark) continue;
+    // A mast stands on this roof.
+    if (m.antenna) continue;
+    const fits = room(m);
+    if (fits < 1) continue;
+
+    const wanted = RISE_MIN + Math.floor(rand() * (RISE_MAX - RISE_MIN + 1));
+    const copies = Math.min(fits, wanted);
+    const middle = Math.max(1, Math.ceil(copies / 2));
+    const firstSmall = copies - Math.floor(rand() * (copies - middle + 1));
+    const small = SMALL_MIN + rand() * (SMALL_MAX - SMALL_MIN);
+
+    const start = litAt(n);
+    let bottom = m.y + m.h;
+    for (let k = 1; k <= copies; k++) {
+      const scale = k >= firstSmall ? small : 1;
+      const layers = m.h * scale;
+      if (bottom + layers > TOWER_TOP) break;
+      // A copy appears once the growth has reached its top.
+      pushCopy(n, bottom, layers, scale, start + (bottom + layers - (m.y + m.h)) / rate);
+      bottom += layers;
+    }
+    for (let a = m.i; a < m.i + m.fw; a++) {
+      for (let b = m.k; b < m.k + m.fd; b++) {
+        for (let c = m.y + m.h; c < Math.min(Math.ceil(bottom), GRID_LAYERS); c++) solid[at(a, b, c)] = 1;
+      }
+    }
+    built++;
+  }
+
+  if (!built) return null;
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+  geometry.setAttribute('window', new THREE.Float32BufferAttribute(windows, 1));
+  geometry.setAttribute('group', new THREE.Float32BufferAttribute(groups, 1));
+  geometry.setAttribute('showAt', new THREE.Float32BufferAttribute(showAt, 1));
+  geometry.setIndex(indices);
+  geometry.userData.towers = built;
   return geometry;
 }
 
@@ -1235,17 +1447,57 @@ function pushTank(target, c, s, sides) {
   pushConvex(target, ringFaces(circle(r, yCap), circle(r * 0.55, y1)));
 }
 
+// True if no cell directly above module m is taken.
+function topExposed(occ, m) {
+  const top = m.y + m.h;
+  if (top >= GRID_LAYERS) return true;
+  for (let a = m.i; a < m.i + m.fw; a++) {
+    for (let b = m.k; b < m.k + m.fd; b++) if (occ[at(a, b, top)]) return false;
+  }
+  return true;
+}
+
+// A thin mast standing on `base`, `height` tall: a lower section to 60% of
+// the height, then a taper to a sharp point.
+function pushAntenna(target, base, height) {
+  const sides = 6;
+  const circle = (radius, y) => {
+    const points = [];
+    for (let n = 0; n < sides; n++) {
+      const a = (2 * Math.PI * n) / sides;
+      points.push([base[0] + radius * Math.cos(a), y, base[2] + radius * Math.sin(a)]);
+    }
+    return points;
+  };
+  const split = base[1] + height * 0.6;
+  pushConvex(target, ringFaces(circle(ANTENNA_RADIUS, base[1]), circle(ANTENNA_RADIUS, split)));
+  // A cone: the base ring, then one triangle from each edge to the tip.
+  const ring = circle(ANTENNA_RADIUS, split);
+  const tip = [base[0], base[1] + height, base[2]];
+  const faces = [ring];
+  for (let n = 0; n < sides; n++) faces.push([ring[n], ring[(n + 1) % sides], tip]);
+  pushConvex(target, faces);
+}
+
 // Windows are studs standing a hair off the face rather than holes cut into
 // it. With an outline renderer the two read the same -- you only see the
 // stroke at the border -- and this needs no re-tessellation. The relief is far
 // too shallow for the depth term to catch, so the normal term draws them: a
 // stud's side walls are perpendicular to the face.
-function pushWindows(target, c, s, axis, sign, rand) {
+//
+// `spec` limits the windows to the flat part of the wall: `uInset` keeps them
+// off each side edge (a chamfer's cut corners), and `vTop` is the wall's
+// height from the bottom (a gabled or shed roof starts above it). `fill` is
+// the share of places with a window.
+function pushWindows(target, c, s, axis, sign, rand, spec = {}) {
+  const { uInset = 0, vTop = s[1], fill = WINDOW_FILL } = spec;
   const uAxis = axis === 0 ? 2 : 0;
   const spacing = Math.max(...WINDOW_SIZES) + WINDOW_GAP;
 
-  const uSpan = s[uAxis] - 2 * WINDOW_MARGIN;
-  const vSpan = s[1] - 2 * WINDOW_MARGIN;
+  const uSpan = s[uAxis] - 2 * (WINDOW_MARGIN + uInset);
+  const vSpan = vTop - 2 * WINDOW_MARGIN;
+  // The middle of the wall part, from the bottom of the module.
+  const vMid = c[1] - s[1] / 2 + vTop / 2;
   const cols = Math.floor(uSpan / spacing);
   const rows = Math.floor(vSpan / spacing);
   if (cols < 1 || rows < 1) return;
@@ -1255,13 +1507,13 @@ function pushWindows(target, c, s, axis, sign, rand) {
 
   for (let r = 0; r < rows; r++) {
     for (let col = 0; col < cols; col++) {
-      if (rand() > WINDOW_FILL) continue;
+      if (rand() > fill) continue;
 
       const size = WINDOW_SIZES[Math.floor(rand() * WINDOW_SIZES.length)];
       const wc = [0, 0, 0];
       wc[axis] = c[axis] + (sign * s[axis]) / 2;
       wc[uAxis] = c[uAxis] - uSpan / 2 + (col + 0.5) * uStep;
-      wc[1] = c[1] - vSpan / 2 + (r + 0.5) * vStep;
+      wc[1] = vMid - vSpan / 2 + (r + 0.5) * vStep;
 
       const ws = [0, 0, 0];
       ws[axis] = WINDOW_RELIEF * 2;
@@ -1325,6 +1577,9 @@ export function createCargo(material, seed = defaultSeed(), groups = defaultGrou
     const c = [(minX + maxX) / 2, (minY + maxY) / 2, (minZ + maxZ) / 2];
     const s = [maxX - minX, maxY - minY, maxZ - minZ];
 
+    // The flat part of the walls, for the windows. Null for a kind without
+    // windows.
+    let windowSpec = null;
     if (m.kind === 'prism') {
       pushPrism(target, c, s, rand() < 0.5 ? 6 : 8, rand() * Math.PI);
     } else if (m.kind === 'frustum') {
@@ -1332,12 +1587,19 @@ export function createCargo(material, seed = defaultSeed(), groups = defaultGrou
     } else if (m.kind === 'stepped') {
       pushStepped(target, c, s, rand);
     } else if (m.kind === 'chamfer') {
-      pushChamfer(target, c, s, 0.18 + rand() * 0.14);
+      const cut = 0.18 + rand() * 0.14;
+      pushChamfer(target, c, s, cut);
+      windowSpec = { uInset: Math.min(s[0], s[2]) * cut };
     } else if (m.kind === 'gabled') {
       // The ridge runs along the longer side.
-      pushGabled(target, c, s, s[0] >= s[2] ? 0 : 2, 0.55 + rand() * 0.2);
+      const wallShare = 0.55 + rand() * 0.2;
+      pushGabled(target, c, s, s[0] >= s[2] ? 0 : 2, wallShare);
+      windowSpec = { vTop: s[1] * wallShare };
     } else if (m.kind === 'shed') {
-      pushShed(target, c, s, rand() < 0.5 ? 0 : 2, rand() < 0.5, 0.45 + rand() * 0.3);
+      const lowShare = 0.45 + rand() * 0.3;
+      pushShed(target, c, s, rand() < 0.5 ? 0 : 2, rand() < 0.5, lowShare);
+      // Every wall is at least as tall as the low side.
+      windowSpec = { vTop: s[1] * lowShare };
     } else if (m.kind === 'lshape') {
       pushLShape(target, c, s, Math.floor(rand() * 4), 0.4 + rand() * 0.2);
     } else if (m.kind === 'split') {
@@ -1348,25 +1610,49 @@ export function createCargo(material, seed = defaultSeed(), groups = defaultGrou
       pushTank(target, c, s, 12 + 2 * Math.floor(rand() * 3));
     } else {
       pushBox(target, c, s);
+      windowSpec = {};
     }
 
-    // Only the flat-sided kinds get windows; they'd float off a sloped face.
-    // They come after the body, so one span covers all of a module's windows.
+    // Only the kinds with flat, upright walls get windows; they would float
+    // off a sloped face. Small containers get windows only as boxes. Medium
+    // and large ones get them on every flat-walled kind, almost full. They
+    // come after the body, so one span covers all of a module's windows.
     const windowStart = target.positions.length / 3;
-    if (m.kind === 'box') {
+    const large = isLarge(m);
+    if (windowSpec && (large || m.kind === 'box')) {
+      if (large) windowSpec.fill = WINDOW_FILL_LARGE;
       for (const [axis, sign] of [[0, 1], [0, -1], [2, 1], [2, -1]]) {
         if (faceExposed(occ, m, axis, sign)) {
-          pushWindows(target, c, s, axis, sign, rand);
+          pushWindows(target, c, s, axis, sign, rand, windowSpec);
         }
       }
     }
 
     windowRanges.push([windowStart, target.positions.length / 3]);
+
+    // The antenna comes last, so the copies can leave it out: copyCount and
+    // copyIndexCount end before it. Only a container with nothing above it
+    // gets one, and such a container never builds a tower.
+    const copyCount = target.positions.length / 3 - vertexStart;
+    const copyIndexCount = target.indices.length - indexStart;
+    m.antenna = false;
+    if (ANTENNA_KINDS.includes(m.kind) && topExposed(occ, m) && rand() < ANTENNA_ODDS) {
+      // On a flat roof the mast can stand off centre. On a pointed roof it
+      // stands on the peak.
+      const flat = m.kind === 'box' || m.kind === 'chamfer' || m.kind === 'ribbed';
+      const x = c[0] + (flat ? (rand() - 0.5) * s[0] * 0.5 : 0);
+      const z = c[2] + (flat ? (rand() - 0.5) * s[2] * 0.5 : 0);
+      pushAntenna(target, [x, maxY, z], ANTENNA_MIN + rand() * (ANTENNA_MAX - ANTENNA_MIN));
+      m.antenna = true;
+    }
+
     ranges.push({
       start: vertexStart,
       count: target.positions.length / 3 - vertexStart,
       indexStart,
       indexCount: target.indices.length - indexStart,
+      copyCount,
+      copyIndexCount,
     });
     baseHeights.push(minY);
   }
@@ -1419,5 +1705,11 @@ export function createCargo(material, seed = defaultSeed(), groups = defaultGrou
   mesh.userData.megaSize = landmarks.megaSize;
   mesh.userData.cantileverCount = modules.filter((m) => m.cantilever).length;
   initVisibility(mesh);
+  // The time at which each vertex's module lights, for the fan-out of the
+  // highlight (see startFan in highlight.js). 0 lights at once.
+  mesh.geometry.setAttribute(
+    'litAt',
+    new THREE.Float32BufferAttribute(new Float32Array(target.positions.length / 3), 1),
+  );
   return mesh;
 }

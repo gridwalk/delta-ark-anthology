@@ -309,6 +309,21 @@ code, pre, kbd, samp {
   column-gap: 2rem;
 }
 
+/* Headlines: the site name, the artist name, and the work title. Mona Sans,
+   wide and black, always in capitals, at the same size as all other text.
+   The site sets the weight and the width on every element, so the rule
+   covers the headline's children too. CSS sets the capitals, so the markup
+   keeps the real case. */
+.headline,
+.headline *,
+.title-box-name,
+.title-box-name * {
+  font-family: "Mona Sans", sans-serif;
+  font-weight: 900;
+  font-stretch: 125%;
+  text-transform: uppercase;
+}
+
 /* The title box: the site name and a "?" link to the about page, framed in
    sea green. The homepage sets it in the listing; the artist pages use it as
    their header. */
@@ -367,6 +382,196 @@ code, pre, kbd, samp {
   margin-bottom: calc(var(--pad-y) * 2);
 }
 
+/* In-page navigation (see page-nav.js). A collapsed row keeps its space, so
+   the title box does not move and the grid does not reflow. While the
+   listing is collapsed, the site name is a link back to it. */
+.toc-entry.is-gone {
+  visibility: hidden;
+}
+
+/* The artwork information on an artist view, in the first listing column,
+   directly under the title box. It lies over the hidden rows of the listing.
+   It has no scroll of its own: a long text makes the page longer, and the
+   page scrolls. It takes the pointer, so its text can be selected and its
+   links work. */
+.artwork-panel {
+  grid-column: 1;
+  grid-row: 1;
+  margin-top: calc(var(--line) * var(--toc-title-rows, 3));
+  position: relative;
+  z-index: 1;
+  pointer-events: auto;
+}
+
+/* Two blank lines above the first line keep the text apart from the title
+   box, and keep the line grid. */
+.artwork-info {
+  padding-top: calc(var(--line) * 2);
+}
+
+/* The artist name, in the body face, under the work title. */
+.artwork-name {
+  color: var(--white);
+}
+
+.artwork-title {
+  color: var(--sea-green);
+}
+
+.artwork-meta {
+  color: var(--neutral-gray);
+}
+
+/* One blank line between the headlines and the text, so the panel keeps to
+   the line grid and each step of its reveal is one whole line. */
+.artwork-info .artist-body {
+  margin-top: var(--line);
+}
+
+.artwork-info .artist-body p,
+.artwork-info .artist-body h2 {
+  margin-bottom: var(--line);
+}
+
+.artwork-essay {
+  margin-top: var(--line);
+}
+
+/* A shade behind the text column on an artist view: black from the window's
+   left edge across most of the column, then clear a little past the column's
+   right edge. It is pure black, not the page black, so it goes fully dark
+   over the ship. --column-right is that edge, set by page-nav.js. It lies over
+   the ship and under the text, and fades in while the artwork panel shows. */
+.artwork-shade {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    to right,
+    #000 0,
+    #000 calc(var(--column-right, 30vw) * 0.6),
+    transparent calc(var(--column-right, 30vw) + 8rem)
+  );
+  opacity: 0;
+  transition: opacity 0.4s;
+}
+
+.artwork-panel:not([hidden]) ~ .artwork-shade {
+  opacity: 1;
+}
+
+/* The previous and next links, in the space between the media's bottom and
+   the window's bottom, as wide as the media. page-nav.js sets the place. The
+   two links sit side by side in the middle of that space. */
+.artwork-pager {
+  position: fixed;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: calc(var(--pad-y) * 2);
+}
+
+.artwork-pager[hidden] {
+  display: none;
+}
+
+/* Each link is a small box: white capitals on pure black, with no line,
+   and white with black text on hover. The padding is a little under the
+   site's standard cell padding. */
+.artwork-pager a {
+  display: flex;
+  align-items: center;
+  gap: 0.5ch;
+  padding: calc(var(--pad-y) * 0.6) calc(var(--pad-x) * 0.7);
+  background: #000;
+  color: var(--white);
+  text-decoration: none;
+  text-transform: uppercase;
+}
+
+/* A small triangle before PREVIOUS, pointing left, and after NEXT, pointing
+   right. They are drawn with borders in the text colour, so they need no
+   glyph from the font and turn black with the text on hover. */
+.pager-prev::before,
+.pager-next::after {
+  content: "";
+  border-top: 0.3em solid transparent;
+  border-bottom: 0.3em solid transparent;
+}
+
+.pager-prev::before {
+  border-right: 0.45em solid currentColor;
+}
+
+.pager-next::after {
+  border-left: 0.45em solid currentColor;
+}
+
+.artwork-pager a:hover {
+  background: var(--white);
+  color: var(--black);
+}
+
+/* The artwork's media, over the laser's end. page-nav.js sets its place and
+   size. It is fixed, so it stays over the laser while the text scrolls. It
+   takes the pointer, so the video player works. */
+/* Pure black behind the media, like the shade, so a letterboxed video or a
+   poster of another shape sits on full black. */
+.artwork-media {
+  background: #000;
+  position: fixed;
+  z-index: 2;
+  pointer-events: auto;
+  /* A hairline in white around the media: half a CSS pixel, which is one
+     screen pixel on a high-density screen. box-sizing puts it inside the box
+     that page-nav.js sizes, so the media stays centred on the laser. */
+  border: 0.5px solid var(--white);
+}
+
+.artwork-media iframe {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: #000;
+}
+
+.artwork-media img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* The tiles on an artist URL, before page-nav.js takes over their clip. */
+.ship-panel-stack.is-hidden {
+  clip-path: inset(0 0 0 100%);
+  pointer-events: none;
+}
+
+/* The site name is a link to the listing. It looks like plain text in the
+   listing, and turns white on hover while the listing is collapsed. */
+.title-box-home {
+  color: inherit;
+  text-decoration: none;
+}
+
+.toc-list:not(.is-collapsed) .title-box-home {
+  cursor: default;
+}
+
+/* In the open listing the name goes nowhere, so it keeps its colour on
+   hover. */
+.toc-list:not(.is-collapsed) .title-box-name:hover {
+  color: var(--sea-green);
+}
+
+.toc-list.is-collapsed .title-box-home:hover {
+  color: var(--white);
+}
+
 /* Homepage layout: --toc-columns of listing, then one more column for the
    ship's fixed views. The listing drops from 3 columns to 2 and then 1 as
    the screen narrows; each step picks the row and title counts the template
@@ -418,6 +623,12 @@ code, pre, kbd, samp {
 
 .toc-ship .toc-list {
   grid-column: 1 / -2;
+  /* Row 1 on purpose: the artwork panel also takes row 1 (see below), and
+     an auto-placed listing would move down to a row under it. */
+  grid-row: 1;
+  /* Over the artwork shade, which would otherwise cover the title box. */
+  position: relative;
+  z-index: 1;
   grid-template-columns: repeat(var(--toc-columns), minmax(0, 1fr));
 }
 
