@@ -488,6 +488,19 @@ code, pre, kbd, samp {
   color: var(--white);
 }
 
+/* The poster icon after the title. It is one em high, so it is as tall as
+   the text. The width follows the aspect ratio of the poster. The flex gap on
+   .toc-link puts the space before it. The file is 32px high, so it is sharp
+   on high-density screens. The row aligns its items on
+   the text baseline. The icon centers on the row instead, because an image
+   baseline is its bottom edge and would lift the icon above the text. */
+.toc-thumb {
+  flex: 0 0 auto;
+  width: auto;
+  height: 1em;
+  align-self: center;
+}
+
 .toc-link:hover {
   background: var(--white);
 }

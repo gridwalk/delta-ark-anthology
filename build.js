@@ -41,6 +41,24 @@ function copyDir(src, dest) {
   }
 }
 
+/* Reads the pixel size of a JPEG from its SOF marker. Returns null if the file
+   is not a JPEG that it can read. */
+function jpegSize(file) {
+  const buf = fs.readFileSync(file);
+  if (buf[0] !== 0xff || buf[1] !== 0xd8) return null;
+  let i = 2;
+  while (i + 9 < buf.length) {
+    if (buf[i] !== 0xff) return null;
+    const marker = buf[i + 1];
+    // SOF0–SOF15 hold the size, except DHT (C4), JPG (C8) and DAC (CC).
+    if (marker >= 0xc0 && marker <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(marker)) {
+      return { height: buf.readUInt16BE(i + 5), width: buf.readUInt16BE(i + 7) };
+    }
+    i += 2 + buf.readUInt16BE(i + 2);
+  }
+  return null;
+}
+
 // ── Load all artist data ─────────────────────────────────────────────────────
 
 function loadArtists() {
@@ -61,11 +79,20 @@ function loadArtists() {
     const { data: frontmatter, content } = matter(raw);
     const body = marked(content);
 
+    // The listing icon comes from a fixed file name, so it needs no
+    // front-matter field. scripts/make-thumbs.js makes it from poster.jpg.
+    // The template needs its size for the width and height attributes.
+    const thumbPath = path.join(ARTISTS_DIR, folder.name, 'images', 'poster-thumb.jpg');
+    const thumbSize = fs.existsSync(thumbPath) ? jpegSize(thumbPath) : null;
+
     artists.push({
       ...frontmatter,
       body,
       slug: folder.name,
       folder: path.join(ARTISTS_DIR, folder.name),
+      thumb: thumbSize
+        ? { src: `/artists/${folder.name}/images/poster-thumb.jpg`, ...thumbSize }
+        : null,
     });
   }
 
