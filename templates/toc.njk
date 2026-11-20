@@ -2,7 +2,9 @@
 
 {# With `selected`, this is an artist URL: the same page, with the listing
    already collapsed (see buildArtistPages in build.js). #}
-{% block title %}{% if selected %}{{ selected.name }}{% else %}Table of Contents{% endif %} &mdash; Runtime Season{% endblock %}
+{# With `about`, this is the about URL: the listing collapsed, with the about
+   text open in the text panel. #}
+{% block title %}{% if selected %}{{ selected.name }}{% elif about %}About{% else %}Table of Contents{% endif %} &mdash; Runtime Season{% endblock %}
 
 {% block bodyClass %}toc-page toc-ship{% endblock %}
 
@@ -30,7 +32,21 @@
      artist is chosen (see page-nav.js). The panel sits in the first listing
      column, directly under the title box. On an artist URL, that artist's
      block starts in view. #}
-  <div class="artwork-panel"{% if not selected %} hidden{% endif %}>
+  <div class="artwork-panel"{% if not (selected or about) %} hidden{% endif %}>
+    {# The about text. Placeholder copy until the real text is written. It
+       has no media and no laser (see openAbout in page-nav.js). #}
+    <article class="artwork-info" data-slug="about"{% if not about %} hidden{% endif %}>
+      <h2 class="headline artwork-title">About</h2>
+      <div class="artist-body">
+        <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.</p>
+        <p>Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.</p>
+        <p>Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo. Nemo enim ipsam voluptatem quia voluptas sit aspernatur aut odit aut fugit.</p>
+        <p>Neque porro quisquam est, qui dolorem ipsum quia dolor sit amet, consectetur, adipisci velit, sed quia non numquam eius modi tempora incidunt ut labore et dolore magnam aliquam quaerat voluptatem. Ut enim ad minima veniam, quis nostrum exercitationem ullam corporis suscipit laboriosam.</p>
+        <p>At vero eos et accusamus et iusto odio dignissimos ducimus qui blanditiis praesentium voluptatum deleniti atque corrupti quos dolores et quas molestias excepturi sint occaecati cupiditate non provident, similique sunt in culpa qui officia deserunt mollitia animi, id est laborum et dolorum fuga.</p>
+        <p>Nam libero tempore, cum soluta nobis est eligendi optio cumque nihil impedit quo minus id quod maxime placeat facere possimus, omnis voluptas assumenda est, omnis dolor repellendus. Temporibus autem quibusdam et aut officiis debitis aut rerum necessitatibus saepe eveniet.</p>
+      </div>
+      <p class="about-credit">Web design by <a href="https://donhanson.art" target="_blank" rel="noopener">Don Hanson</a></p>
+    </article>
     {% for artist in artists %}
     <article class="artwork-info" data-slug="{{ artist.slug }}"{% if artist.video_url %} data-video="{{ artist.video_url }}"{% endif %}{% if artist.poster %} data-poster="{{ artist.poster }}"{% endif %}{% if not (selected and artist.slug == selected.slug) %} hidden{% endif %}>
       {# The work title as the headline, then the artist name under it in the
@@ -67,7 +83,7 @@
   {# Frames for the ship's fixed front, side, and top views. They are empty:
      the ship iframe draws each view into the space inside its frame. #}
   {# On an artist URL the tiles start hidden (see page-nav.js). #}
-  <div class="ship-panel-stack{% if selected %} is-hidden{% endif %}" aria-hidden="true">
+  <div class="ship-panel-stack{% if selected or about %} is-hidden{% endif %}" aria-hidden="true">
     <div class="ship-panel"></div>
     <div class="ship-panel"></div>
     <div class="ship-panel"></div>

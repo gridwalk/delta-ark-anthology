@@ -3,6 +3,7 @@ import { abs, attribute, float, positionLocal, select, vec3 } from 'three/tsl';
 import { buildTowers } from './cargo.js';
 import { withoutWindows } from './detail.js';
 import { clock } from './visibility.js';
+import { exploded } from './explode.js';
 
 /**
  * The towers that a lit chunk builds on top of its containers (see
@@ -26,7 +27,7 @@ export function createTowers(highlight) {
     .or(highlight.all.greaterThan(0.5));
   // Green marks every cargo pixel, the same as the containers (highlight.js).
   material.colorNode = vec3(select(lit, highlight.strength, float(0)), 1, 0);
-  material.positionNode = withoutWindows(select(shown, positionLocal, vec3(0, 0, 0)));
+  material.positionNode = withoutWindows(select(shown, exploded(positionLocal), vec3(0, 0, 0)));
 
   const meshes = [];
 

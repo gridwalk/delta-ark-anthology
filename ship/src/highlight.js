@@ -2,6 +2,7 @@ import { MeshBasicNodeMaterial } from 'three/webgpu';
 import { abs, attribute, float, positionLocal, select, uniform, vec3 } from 'three/tsl';
 import { withoutWindows } from './detail.js';
 import { clock, shownNode } from './visibility.js';
+import { exploded } from './explode.js';
 
 const FADE = 0.12; // seconds for a highlight to come up or go down
 
@@ -99,7 +100,7 @@ export function createHighlight() {
   material.colorNode = vec3(select(lit, strength, float(0)), 1, 0);
   // Which containers are in view, and when they change, comes from
   // visibility.js.
-  material.positionNode = withoutWindows(select(shownNode(), positionLocal, vec3(0, 0, 0)));
+  material.positionNode = withoutWindows(select(shownNode(), exploded(positionLocal), vec3(0, 0, 0)));
 
   return {
     material,

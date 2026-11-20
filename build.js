@@ -206,10 +206,13 @@ function buildTypePairing(artists) {
 
 /* The about page. A placeholder for now: the sea backdrop and a framed
    block of text. */
-function buildAbout() {
+function buildAbout(artists) {
   const outPath = path.join(DIST_DIR, 'about', 'index.html');
   ensureDir(path.dirname(outPath));
-  fs.writeFileSync(outPath, env.render('about.njk', { page: 'about' }));
+  // The about URL serves the homepage with the about text open, the same as
+  // the artist URLs (see openAbout in page-nav.js). about.njk is no longer
+  // used.
+  fs.writeFileSync(outPath, env.render('toc.njk', { artists, about: true, page: 'toc' }));
   console.log('  Built: about/index.html');
 }
 
@@ -295,7 +298,7 @@ function build() {
   buildTOC(artists);
   buildTypeSpecimen(artists);
   buildTypePairing(artists);
-  buildAbout();
+  buildAbout(artists);
   copyStatic();
   copyVendor();
   copyEmbeds();

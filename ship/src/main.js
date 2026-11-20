@@ -10,6 +10,7 @@ import { createModuleView } from './modules.js';
 import { createHighlight, startFan } from './highlight.js';
 import { createTowers } from './towers.js';
 import { createLaser } from './laser.js';
+import { explodeAmount } from './explode.js';
 import { createDrop } from './drop.js';
 import { clock, isShown, transition } from './visibility.js';
 import { GROUPING, chooseKept } from './cargo.js';
@@ -365,6 +366,20 @@ function onMessage(event) {
   // second click on the same tile soon after flies to the reverse view (see
   // viewForClick).
   // { type: 'ship:tune', dither: {...}, fog: {...} } sets the TUNE values.
+  // { type: 'ship:explode', on } opens or closes the exploded view of the
+  // cargo, for the about page (see explode.js and updateExplode).
+  if (event.data?.type === 'ship:explode') {
+    setExplode(Boolean(event.data.on));
+    return;
+  }
+  // { type: 'ship:viewCenter', x } centres the ship at x, in viewport pixels
+  // across, outside the artwork view: on the about view, the middle of the
+  // space right of the text column. x: null goes back to the listing's
+  // centre, left of the tiles. The ship slides there (see updateViewOffset).
+  if (event.data?.type === 'ship:viewCenter') {
+    viewCenterX = Number.isFinite(event.data.x) ? event.data.x : null;
+    return;
+  }
   // { type: 'ship:focusCenter', x, y } is where, in viewport pixels, the
   // laser's end goes on the artwork view: the centre of the media box. null
   // is the middle of the window on that axis.
@@ -378,6 +393,9 @@ function onMessage(event) {
   // { type: 'ship:focus', group } fires the laser from that chunk and flies
   // the camera out along it. group: null goes back (see focusGroup).
   if (event.data?.type === 'ship:focus') {
+    // `duration` (seconds) is the whole transition on the framing page. The
+    // camera's flight takes all of it, so it ends last (see focusTime).
+    if (Number.isFinite(event.data.duration)) focusTime = event.data.duration;
     focusGroup(Number.isInteger(event.data.group) ? event.data.group : null);
     return;
   }
@@ -405,7 +423,13 @@ function onMessage(event) {
   if (event.data?.type === 'ship:panels') {
     const rects = event.data.rects ?? [];
     panelRects = rects;
-    panels.place(rects);
+    // The warm-up waits for the tiles (see warmUp).
+    panels.place(rects).then(() => {
+      if (!warm.panelsReady) {
+        warm.panelsReady = true;
+        warm.frames = 0;
+      }
+    });
     // The panels cover the right side of the window, so the main view centres
     // itself on the space to their left.
     const shown = rects.filter((r) => r && r.width >= 1 && r.height >= 1);
@@ -489,6 +513,7 @@ const pickRay = new THREE.Ray();
 const pickInverse = new THREE.Matrix4();
 const pickNdc = new THREE.Vector2();
 const pickBox = new THREE.Box3();
+const pickShift = new THREE.Vector3();
 const pickHit = new THREE.Vector3();
 const raycaster = new THREE.Raycaster();
 let shipHover = null; // the group that the pointer lit, or null
@@ -597,6 +622,12 @@ function pickGroup(forClick = false) {
     if (moduleGroup[n] < 0 || !isShown(cargo, n, now)) continue;
     pickBox.min.fromArray(boxes, n * 6);
     pickBox.max.fromArray(boxes, n * 6 + 3);
+    // In the exploded view, the box moves with its container.
+    if (explodeAmount.value > 0 && cargo.userData.explode) {
+      pickShift.fromArray(cargo.userData.explode, n * 3).multiplyScalar(explodeAmount.value);
+      pickBox.min.add(pickShift);
+      pickBox.max.add(pickShift);
+    }
     if (!pickRay.intersectBox(pickBox, pickHit)) continue;
     const distance = pickHit.distanceToSquared(pickRay.origin);
     if (distance < best) {
@@ -675,22 +706,51 @@ const VIEW_DROP = 0.08;
 // window down: the middle of the space that the text column leaves free (see
 // updateViewOffset).
 let offsetShare = 1;
+// The time of a transition to or from an artist, in seconds. The framing
+// page sends it with each 'ship:focus', the same in both directions.
+let focusTime = 2;
 let focusCenterX = null;
 let focusCenterY = null;
-const OFFSET_EASE = 4; // per second, about the length of a camera flight
+// Per second. Most of the way within the transition's time (see focusTime).
+const offsetEase = () => 3 / focusTime;
+// The listing's shift across, in pixels, as shown. It eases toward
+// listShiftGoal(), so a change of the free space (the about view) slides the
+// ship and does not jump.
+let listShiftNow = null;
+// On the about view, the centre of the space right of the text column, in
+// viewport pixels across, from the framing page. null elsewhere.
+let viewCenterX = null;
+function listShiftGoal() {
+  const width = window.innerWidth;
+  if (viewCenterX !== null) return width / 2 - viewCenterX;
+  return freeWidth === null ? 0 : Math.max(0, (width - freeWidth) / 2);
+}
+
 function updateViewOffset(delta) {
+  let changed = false;
   const goal = focused === null ? 1 : 0;
-  if (offsetShare === goal) return;
-  const k = 1 - Math.exp(-OFFSET_EASE * delta);
-  offsetShare += (goal - offsetShare) * k;
-  if (Math.abs(goal - offsetShare) < 0.001) offsetShare = goal;
+  if (offsetShare !== goal) {
+    const k = 1 - Math.exp(-offsetEase() * delta);
+    offsetShare += (goal - offsetShare) * k;
+    if (Math.abs(goal - offsetShare) < 0.001) offsetShare = goal;
+    changed = true;
+  }
+  const shiftGoal = listShiftGoal();
+  if (listShiftNow === null) listShiftNow = shiftGoal;
+  if (listShiftNow !== shiftGoal) {
+    const k = 1 - Math.exp(-offsetEase() * delta);
+    listShiftNow += (shiftGoal - listShiftNow) * k;
+    if (Math.abs(shiftGoal - listShiftNow) < 0.5) listShiftNow = shiftGoal;
+    changed = true;
+  }
+  if (!changed) return;
   applyViewOffset();
   camera.updateProjectionMatrix();
 }
 function applyViewOffset() {
   const width = window.innerWidth;
   const height = window.innerHeight;
-  const listShift = freeWidth === null ? 0 : Math.max(0, (width - freeWidth) / 2);
+  const listShift = listShiftNow ?? listShiftGoal();
   // A negative x offset moves the image right, to a centre right of the
   // middle.
   const focusShift = focusCenterX === null ? 0 : width / 2 - focusCenterX;
@@ -809,7 +869,7 @@ function focusGroup(group) {
     // Back to the start distance and height, from the current side.
     const turn = new THREE.Spherical().setFromVector3(camera.position.clone().sub(controls.target));
     const home = new THREE.Spherical(START_VIEW.radius, START_VIEW.phi, turn.theta);
-    flight.fly(new THREE.Vector3().setFromSpherical(home).add(START_TARGET), START_TARGET);
+    flight.fly(new THREE.Vector3().setFromSpherical(home).add(START_TARGET), START_TARGET, focusTime);
     return;
   }
 
@@ -845,7 +905,7 @@ function focusGroup(group) {
   const length = toEnd.length();
   laser.fire(start, toEnd.normalize(), length, LASER_TIME);
   controls.autoRotate = false;
-  flight.fly(view.position, view.end);
+  flight.fly(view.position, view.end, focusTime);
 }
 
 // A second click on the same tile within REVERSE_WINDOW seconds of the last
@@ -926,14 +986,74 @@ let flying = false;
 let holdUntil = 0;
 const settleOffset = new THREE.Vector3();
 const settleView = new THREE.Spherical();
+// The camera's distance on the listing: the start view's, or farther out in
+// the exploded view, which takes more room.
+const homeRadius = () => (explodeOn ? EXPLODE_VIEW.radius : START_VIEW.radius);
+// The point the camera looks at on the listing. In the exploded view, the
+// camera stands low, at EXPLODE_EYE, a little above the hull, EXPLODE_REACH
+// out from the ship. It looks up at
+// EXPLODE_AIM, about the middle of the exploded stack. The upward tilt puts
+// the hull near the bottom of the view and the stack above it.
+const EXPLODE_EYE = 5;
+const EXPLODE_AIM = 15;
+const EXPLODE_REACH = 36;
+const homeTarget = () =>
+  explodeOn ? new THREE.Vector3(START_TARGET.x, EXPLODE_AIM, START_TARGET.z) : START_TARGET;
+
+// The exploded view. explodeAmount eases from 0 to 1 and back over
+// EXPLODE_TIME seconds, with an ease in and out. The camera flies to the
+// exploded view's low side view (EXPLODE_VIEW), or back, over the same time,
+// and the drift back keeps that view (see homeRadius and homeTarget).
+const EXPLODE_TIME = 1.6; // seconds
+let explodeOn = false;
+let explodeT = 0; // 0 to 1, before the ease
+// The exploded view is a side view: from the starboard side, low, looking
+// across the ship and up at the stack. The automatic turn stops there, and the drift
+// back after a drag returns to this view (see settleCamera). Leaving it, the
+// turn starts again and the camera flies back to the start view's height,
+// from the side it is on.
+// From the target: the distance, and the angle from straight up, past level
+// because the camera is below the target.
+const EXPLODE_VIEW = {
+  radius: Math.hypot(EXPLODE_REACH, EXPLODE_AIM - EXPLODE_EYE),
+  phi: Math.PI / 2 + Math.atan2(EXPLODE_AIM - EXPLODE_EYE, EXPLODE_REACH),
+  theta: 0,
+};
+function setExplode(on) {
+  if (on === explodeOn) return;
+  explodeOn = on;
+  if (focused !== null) return;
+  controls.autoRotate = !on;
+  const turn = new THREE.Spherical().setFromVector3(camera.position.clone().sub(controls.target));
+  const view = on
+    ? new THREE.Spherical(homeRadius(), EXPLODE_VIEW.phi, EXPLODE_VIEW.theta)
+    : new THREE.Spherical(homeRadius(), START_VIEW.phi, turn.theta);
+  const target = homeTarget();
+  flight.fly(new THREE.Vector3().setFromSpherical(view).add(target), target, EXPLODE_TIME);
+}
+function updateExplode(delta) {
+  const goal = explodeOn ? 1 : 0;
+  if (explodeT === goal) return;
+  explodeT = goal > explodeT ? Math.min(1, explodeT + delta / EXPLODE_TIME) : Math.max(0, explodeT - delta / EXPLODE_TIME);
+  const t = explodeT;
+  explodeAmount.value = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+}
+
 function settleCamera(delta) {
   const k = 1 - Math.exp(-TUNE.camera.settle * delta);
   settleOffset.copy(camera.position).sub(controls.target);
   settleView.setFromVector3(settleOffset);
-  settleView.phi += (START_VIEW.phi - settleView.phi) * k;
-  settleView.radius += (START_VIEW.radius - settleView.radius) * k;
+  settleView.phi += ((explodeOn ? EXPLODE_VIEW.phi : START_VIEW.phi) - settleView.phi) * k;
+  // In the exploded view, the turn goes back to the side view too, the short
+  // way round.
+  if (explodeOn) {
+    let turn = EXPLODE_VIEW.theta - settleView.theta;
+    turn = Math.atan2(Math.sin(turn), Math.cos(turn));
+    settleView.theta += turn * k;
+  }
+  settleView.radius += (homeRadius() - settleView.radius) * k;
   settleView.makeSafe();
-  controls.target.lerp(START_TARGET, k);
+  controls.target.lerp(homeTarget(), k);
   camera.position.setFromSpherical(settleView).add(controls.target);
 }
 
@@ -962,6 +1082,38 @@ function recordFrame(ms) {
     );
   }
   Object.assign(stats, { frames: 0, total: 0, worst: 0, slow: 0, since: now });
+}
+
+// The warm-up on a first load. The ship and the framing page share one main
+// thread, so while the ship builds its cargo and compiles its shaders, the
+// page's own animations stall. Thus the ship stays invisible until it runs
+// smoothly: it draws WARM_FRAMES frames in a row under WARM_SLOW ms each,
+// after its tiles are built (on the homepage, which asks for tiles with
+// ?groups=). Then it shows itself and sends 'ship:shown', and the page starts
+// its own animations. The containers' build-up starts only then, so it is
+// seen whole. After WARM_LIMIT seconds the ship shows itself anyway.
+const WARM_FRAMES = 6;
+const WARM_SLOW = 40; // milliseconds
+const WARM_LIMIT = 8; // seconds
+const warm = {
+  done: false,
+  frames: 0,
+  started: performance.now() / 1000,
+  panelsReady: !new URLSearchParams(window.location.search).get('groups'),
+};
+document.body.style.opacity = '0';
+
+function warmUp(time, delta) {
+  if (warm.done) return true;
+  warm.frames = delta * 1000 < WARM_SLOW ? warm.frames + 1 : 0;
+  const smooth = warm.panelsReady && warm.frames >= WARM_FRAMES;
+  if (!smooth && time - warm.started < WARM_LIMIT) return false;
+  warm.done = true;
+  document.body.style.opacity = '';
+  if (window.parent !== window) {
+    window.parent.postMessage({ type: 'ship:shown' }, window.location.origin);
+  }
+  return true;
 }
 
 let lastTime = null;
@@ -995,8 +1147,11 @@ renderer.setAnimationLoop(() => {
   // fadeShift in water.js), so the grid also shows from far out.
   water.userData.fadeShift.value = Math.max(0, camera.position.distanceTo(START_TARGET) - START_VIEW.radius);
   updateViewOffset(delta);
+  updateExplode(delta);
   lastTime = time;
-  if (fill.update(time)) {
+  // The containers' build-up waits for the warm-up.
+  const ready = warmUp(time, delta);
+  if (ready && fill.update(time)) {
     crawl ??= createCrawl(view, ship.userData.cargo);
     crawl.update(time);
   }

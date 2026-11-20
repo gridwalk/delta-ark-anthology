@@ -437,11 +437,19 @@ code, pre, kbd, samp {
   margin-top: var(--line);
 }
 
+/* The credit line at the end of the about text, one blank line below it.
+   The text is white, and the link keeps the site's link colour. */
+.about-credit {
+  margin-top: var(--line);
+  color: var(--white);
+}
+
 /* A shade behind the text column on an artist view: black from the window's
    left edge across most of the column, then clear a little past the column's
-   right edge. It is pure black, not the page black, so it goes fully dark
+    right edge. It is pure black, not the page black, so it goes fully dark
    over the ship. --column-right is that edge, set by page-nav.js. It lies over
-   the ship and under the text, and fades in while the artwork panel shows. */
+   the ship and under the text. page-nav.js steps it in and out in vertical
+   strips, like the tiles. */
 .artwork-shade {
   position: fixed;
   inset: 0;
@@ -453,12 +461,8 @@ code, pre, kbd, samp {
     #000 calc(var(--column-right, 30vw) * 0.6),
     transparent calc(var(--column-right, 30vw) + 8rem)
   );
-  opacity: 0;
-  transition: opacity 0.4s;
-}
-
-.artwork-panel:not([hidden]) ~ .artwork-shade {
-  opacity: 1;
+  /* Hidden until page-nav.js steps it in, in vertical strips. */
+  clip-path: inset(0 100% 0 0);
 }
 
 /* The previous and next links, in the space between the media's bottom and
@@ -545,6 +549,18 @@ code, pre, kbd, samp {
   object-fit: contain;
 }
 
+/* The loader on a first load (see page-nav.js), where the first row of the
+   listing goes, in capitals like the other small labels. */
+.toc-loading {
+  grid-column: 1;
+  grid-row: 1;
+  margin-top: calc(var(--line) * var(--toc-title-rows, 3));
+  position: relative;
+  z-index: 1;
+  color: var(--neutral-gray);
+  text-transform: uppercase;
+}
+
 /* The tiles on an artist URL, before page-nav.js takes over their clip. */
 .ship-panel-stack.is-hidden {
   clip-path: inset(0 0 0 100%);
@@ -570,6 +586,12 @@ code, pre, kbd, samp {
 
 .toc-list.is-collapsed .title-box-home:hover {
   color: var(--white);
+}
+
+/* The "?" box is white while the about text is open (see page-nav.js). */
+.toc-list.is-about .title-box-about {
+  background: var(--white);
+  color: var(--black);
 }
 
 /* Homepage layout: --toc-columns of listing, then one more column for the

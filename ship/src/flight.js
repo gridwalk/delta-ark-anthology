@@ -18,8 +18,8 @@ export function createFlight(camera, controls) {
     new Spherical().setFromVector3(position.clone().sub(target));
 
   return {
-    /** Flies to `position`, looking at `target`. */
-    fly(position, target) {
+    /** Flies to `position`, looking at `target`, over `duration` seconds. */
+    fly(position, target, duration = DURATION) {
       const fromTarget = controls.target.clone();
       const from = offsetOf(camera.position, fromTarget);
       const to = offsetOf(position, target);
@@ -31,7 +31,7 @@ export function createFlight(camera, controls) {
       if (turn > Math.PI) turn -= 2 * Math.PI;
       if (turn < -Math.PI) turn += 2 * Math.PI;
 
-      flight = { fromTarget, toTarget: target.clone(), from, to, turn, t: 0 };
+      flight = { fromTarget, toTarget: target.clone(), from, to, turn, t: 0, duration };
       controls.enabled = false;
     },
 
@@ -39,7 +39,7 @@ export function createFlight(camera, controls) {
     update(delta) {
       if (!flight) return false;
 
-      flight.t = Math.min(1, flight.t + delta / DURATION);
+      flight.t = Math.min(1, flight.t + delta / flight.duration);
       const e = easeInOutCubic(flight.t);
       const { from, to } = flight;
 

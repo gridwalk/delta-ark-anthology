@@ -36,6 +36,15 @@ const WINDOW_RELIEF = 0.01;
 const WINDOW_MARGIN = 0.024;
 const WINDOW_GAP = 0.014;
 const WINDOW_FILL = 0.8;
+
+// The exploded view (see explode.js). A module moves EXPLODE_STEP for each
+// grid cell between its near corner and the middle of the deck, and
+// EXPLODE_RISE for each layer under it, then EXPLODE_LIFT up off the hull.
+// Two touching modules thus end at least one step apart.
+// The view spreads the cargo mostly up, not out.
+const EXPLODE_STEP = 0.25;
+const EXPLODE_RISE = 1.1;
+const EXPLODE_LIFT = 4;
 // Medium and large containers are almost covered (see isLarge).
 const WINDOW_FILL_LARGE = 0.95;
 
@@ -1086,7 +1095,10 @@ export function buildTowers(cargo, group, origin, litAt, { odds, rate, rand = Ma
   const windows = [];
   const groups = [];
   const showAt = [];
+  const explodes = [];
   const indices = [];
+  // A tower moves with its module in the exploded view.
+  const explode = cargo.userData.explode;
 
   const pushCopy = (n, bottom, layers, scale, time) => {
     const m = modules[n];
@@ -1109,6 +1121,7 @@ export function buildTowers(cargo, group, origin, litAt, { odds, rate, rand = Ma
       windows.push(baseWindows[v]);
       groups.push(group);
       showAt.push(time);
+      explodes.push(explode[n * 3], explode[n * 3 + 1], explode[n * 3 + 2]);
     }
     for (let x = indexStart; x < indexStart + indexCount; x++) {
       indices.push(baseIndices[x] - start + copyStart);
@@ -1163,6 +1176,7 @@ export function buildTowers(cargo, group, origin, litAt, { odds, rate, rand = Ma
   geometry.setAttribute('window', new THREE.Float32BufferAttribute(windows, 1));
   geometry.setAttribute('group', new THREE.Float32BufferAttribute(groups, 1));
   geometry.setAttribute('showAt', new THREE.Float32BufferAttribute(showAt, 1));
+  geometry.setAttribute('explode', new THREE.Float32BufferAttribute(explodes, 3));
   geometry.setIndex(indices);
   geometry.userData.towers = built;
   return geometry;
@@ -1705,6 +1719,24 @@ export function createCargo(material, seed = defaultSeed(), groups = defaultGrou
   mesh.userData.megaSize = landmarks.megaSize;
   mesh.userData.cantileverCount = modules.filter((m) => m.cantilever).length;
   initVisibility(mesh);
+  // The exploded view's offset of each module (see explode.js), in the
+  // cargo's units. Per module in userData.explode, and per vertex in the
+  // `explode` attribute.
+  const explode = new Float32Array(modules.length * 3);
+  const vertexExplode = new Float32Array(target.positions.length);
+  modules.forEach((m, n) => {
+    explode[n * 3] = (m.i - NX / 2) * EXPLODE_STEP;
+    explode[n * 3 + 1] = m.y * EXPLODE_RISE + EXPLODE_LIFT;
+    explode[n * 3 + 2] = (m.k - NZ / 2) * EXPLODE_STEP;
+    const { start, count } = ranges[n];
+    for (let v = start; v < start + count; v++) {
+      vertexExplode[v * 3] = explode[n * 3];
+      vertexExplode[v * 3 + 1] = explode[n * 3 + 1];
+      vertexExplode[v * 3 + 2] = explode[n * 3 + 2];
+    }
+  });
+  mesh.userData.explode = explode;
+  mesh.geometry.setAttribute('explode', new THREE.Float32BufferAttribute(vertexExplode, 3));
   // The time at which each vertex's module lights, for the fan-out of the
   // highlight (see startFan in highlight.js). 0 lights at once.
   mesh.geometry.setAttribute(

@@ -7,7 +7,7 @@
 {# With `selected` (an artist URL), the list starts collapsed: every entry is
    gone and the title stays (see page-nav.js). data-home-title is the tab
    title of the listing, for the way back. #}
-<ul class="toc-list{% if selected %} is-collapsed{% endif %}" data-home-title="Table of Contents &mdash; Runtime Season"{% for artist in artists %}{% if selected and artist.slug == selected.slug %} data-selected="{{ loop.index0 }}"{% endif %}{% endfor %}>
+<ul class="toc-list{% if selected or about %} is-collapsed{% endif %}{% if about %} is-about{% endif %}"{% if about %} data-view="about"{% endif %} data-home-title="Table of Contents &mdash; Runtime Season"{% for artist in artists %}{% if selected and artist.slug == selected.slug %} data-selected="{{ loop.index0 }}"{% endif %}{% endfor %}>
   {% if page == 'toc' %}
   <li class="toc-title title-box">
     {# A real link, so it takes clicks where the homepage turns pointer
@@ -17,7 +17,7 @@
   </li>
   {% endif %}
   {% for artist in artists %}
-  <li class="toc-entry{% if selected %} is-gone{% endif %}">
+  <li class="toc-entry{% if selected or about %} is-gone{% endif %}">
     <a href="/artists/{{ artist.slug }}/" class="toc-link" data-index="{{ loop.index0 }}"><span class="toc-name">{{ artist.name }}</span><span class="toc-leader"></span><span class="toc-work">{{ artist.work_title }}</span>{% if artist.thumb %}<img class="toc-thumb" src="{{ artist.thumb.src }}" alt="" width="{{ artist.thumb.width }}" height="{{ artist.thumb.height }}" loading="lazy">{% endif %}</a>
   </li>
   {% endfor %}
