@@ -126,12 +126,12 @@ function buildTOC(artists) {
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Delta Ark Anthology</title>
+  <title>Runtime Season</title>
   <link rel="canonical" href="/">
   <meta http-equiv="refresh" content="0; url=/">
 </head>
 <body>
-  <p>This page has moved to the <a href="/">Delta Ark Anthology</a>.</p>
+  <p>This page has moved to the <a href="/">Runtime Season</a>.</p>
   <script>location.replace('/');</script>
 </body>
 </html>
